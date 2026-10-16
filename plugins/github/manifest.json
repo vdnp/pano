@@ -1,0 +1,28 @@
+{
+  "name": "github",
+  "displayName": "GitHub",
+  "version": "0.1.0",
+  "description": "Okunmamış GitHub bildirimlerini getirir.",
+  "main": "index.js",
+  "settings": {
+    "interval": {
+      "type": "number",
+      "label": "Kontrol sıklığı (dakika)",
+      "default": 5,
+      "min": 1,
+      "max": 120
+    },
+    "participatingOnly": {
+      "type": "boolean",
+      "label": "Sadece dahil olduğum konuşmalar",
+      "default": false
+    }
+  },
+  "secrets": {
+    "token": {
+      "label": "Erişim anahtarı (classic token)",
+      "help": "Classic bir token oluştur ve notifications iznini işaretle. Özel repoların bildirimleri için repo izni de gerekebilir. Fine-grained token'lar bildirim API'sini desteklemez.",
+      "helpUrl": "https://github.com/settings/tokens/new?scopes=notifications&description=Pano"
+    }
+  }
+}

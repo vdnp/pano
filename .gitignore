@@ -1,0 +1,10 @@
+node_modules
+out
+dist
+*.log
+.env
+.env.*
+
+# Kullanıcı verisi normalde %APPDATA%/pano içindedir; proje klasöründe oluşursa yayınlanmasın
+pano.db*
+pano.json*

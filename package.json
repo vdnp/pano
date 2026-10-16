@@ -1,0 +1,59 @@
+{
+  "name": "pano",
+  "version": "0.1.0",
+  "description": "Kişisel bildirim ve otomasyon paneli",
+  "main": "./out/main/index.js",
+  "author": "vdnp",
+  "license": "MIT",
+  "homepage": "https://github.com/vdnp/pano#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vdnp/pano.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vdnp/pano/issues"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource/chakra-petch": "^5.0.0",
+    "@fontsource/manrope": "^5.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.8.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
+  },
+  "build": {
+    "appId": "io.github.vdnp.pano",
+    "copyright": "Copyright © 2026 vdnp",
+    "productName": "Pano",
+    "files": [
+      "out/**"
+    ],
+    "extraResources": [
+      {
+        "from": "plugins",
+        "to": "plugins"
+      },
+      {
+        "from": "build",
+        "to": "icons",
+        "filter": [
+          "tray*.png",
+          "overlay-*.png"
+        ]
+      }
+    ]
+  }
+}
