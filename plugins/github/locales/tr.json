@@ -1,0 +1,34 @@
+{
+  "errors": {
+    "noToken": "Erişim anahtarı eklenmedi. Ayarlardan bir GitHub token'ı gir.",
+    "invalidToken": "GitHub anahtarı geçersiz veya süresi dolmuş.",
+    "rateLimited": "GitHub istek sınırına ulaşıldı. {at, time} sonrasında tekrar denenecek.",
+    "forbidden": "GitHub erişimi reddetti. Anahtarın notifications iznine sahip olduğunu kontrol et.",
+    "http": "GitHub beklenmeyen bir yanıt verdi ({status})."
+  },
+  "reason": {
+    "approval_requested": "Onay istendi",
+    "assign": "Sana atandı",
+    "author": "Senin açtığın",
+    "ci_activity": "CI",
+    "comment": "Yorum",
+    "invitation": "Davet",
+    "manual": "Takip ettiğin",
+    "mention": "Senden bahsedildi",
+    "review_requested": "İnceleme istendi",
+    "security_alert": "Güvenlik uyarısı",
+    "state_change": "Durum değişti",
+    "subscribed": "Abone olduğun",
+    "team_mention": "Takımından bahsedildi"
+  },
+  "type": {
+    "Issue": "Issue",
+    "PullRequest": "Pull request",
+    "Release": "Sürüm",
+    "Commit": "Commit",
+    "Discussion": "Tartışma",
+    "CheckSuite": "Kontrol",
+    "RepositoryVulnerabilityAlert": "Güvenlik"
+  },
+  "untitled": "(başlıksız)"
+}

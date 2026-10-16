@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import github from '../../plugins/github/index.js';
+import { pluginI18n } from '../helpers.js';
 
 const source = github.sources.notifications;
 
-function fakeCtx({ token = 'tok', settings = {}, state = {}, responses = [] } = {}) {
+function fakeCtx({ token = 'tok', settings = {}, state = {}, responses = [], locale = 'tr' } = {}) {
+  const i18n = pluginI18n('github', locale);
   const stateMap = new Map(Object.entries(state));
   const queue = [...responses];
   return {
@@ -13,7 +15,10 @@ function fakeCtx({ token = 'tok', settings = {}, state = {}, responses = [] } = 
     stateMap,
     fetch: vi.fn(async () => queue.shift()),
     notify: vi.fn(() => true),
-    log: vi.fn()
+    log: vi.fn(),
+    key: (k) => 'github:' + k,
+    t: (k, p) => i18n.t('github:' + k, p),
+    error: (k, p) => i18n.error('github:' + k, p)
   };
 }
 
@@ -52,7 +57,7 @@ describe('github eklentisi', () => {
         body: 'acme/app',
         url: 'https://github.com/acme/app/issues/12',
         level: 'info',
-        tags: ['Issue', 'Senden bahsedildi'],
+        tags: ['github:type.Issue', 'github:reason.mention'],
         createdAt: Date.parse('2026-01-15T10:00:00Z'),
         meta: { threadId: '100', repo: 'acme/app', reason: 'mention', type: 'Issue' }
       });
@@ -84,7 +89,7 @@ describe('github eklentisi', () => {
       });
       await source.run(ctx);
 
-      expect(ctx.notify.mock.calls[0][0]).toMatchObject({ level: 'warning', tags: ['Güvenlik', 'Güvenlik uyarısı'] });
+      expect(ctx.notify.mock.calls[0][0]).toMatchObject({ level: 'warning', tags: ['github:type.RepositoryVulnerabilityAlert', 'github:reason.security_alert'] });
       expect(ctx.notify.mock.calls[1][0]).toMatchObject({ level: 'info', tags: ['YeniTur', 'yeni_sebep'] });
     });
 
@@ -184,5 +189,14 @@ describe('github eklentisi', () => {
         url: 'https://github.com/notifications', body: ''
       });
     });
+  });
+
+  it("İngilizce: istek sınırı saatini uygulama dilinin biçimiyle verir", async () => {
+    const reset = Math.floor(Date.parse("2026-01-15T10:30:00Z") / 1000);
+    const ctx = fakeCtx({ locale: "en", responses: [json({}, 403, { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) })] });
+    const expectedTime = new Date(reset * 1000).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" });
+    const err = await source.run(ctx).catch((e) => e);
+    expect(err.message).toBe("GitHub's request limit was reached. It will be retried after " + expectedTime + ".");
+    expect(err.i18n).toEqual({ key: "github:errors.rateLimited", params: { at: reset * 1000 } });
   });
 });

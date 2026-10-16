@@ -1,7 +1,7 @@
 import { ExternalIcon } from './Icons.jsx';
-import { clock, dayLabel, relativeTime } from '../lib/time.js';
+import { useI18n } from '../lib/i18n.jsx';
 
-function groupByDay(items) {
+function groupByDay(items, dayLabel) {
   const groups = [];
   for (const item of items) {
     const label = dayLabel(item.createdAt);
@@ -13,48 +13,74 @@ function groupByDay(items) {
 }
 
 function EmptyState({ needsSetup, unreadOnly, onOpenSettings }) {
+  const { t } = useI18n();
   if (needsSetup.length > 0) {
-    const first = needsSetup[0];
     return (
-      <div className="empty">
-        <h2>{first.displayName} bağlantısı kurulmadı</h2>
-        <p>Bildirimleri görmek için {first.displayName} erişim anahtarını ekle.</p>
-        <button className="btn btn-primary" onClick={() => onOpenSettings(first.name)}>
-          Anahtar ekle
-        </button>
+      <div className="setup-list">
+        {needsSetup.map((s) => (
+          <div key={s.name} className="empty">
+            <h2>{s.title}</h2>
+            {s.body && <p>{s.body}</p>}
+            {s.action && (
+              <button className="btn btn-primary" onClick={() => onOpenSettings(s.name)}>
+                {s.action}
+              </button>
+            )}
+          </div>
+        ))}
       </div>
     );
   }
   return (
     <div className="empty">
-      <h2>{unreadOnly ? 'Okunmamış bildirim yok' : 'Henüz bildirim yok'}</h2>
-      <p>Kaynaklar arka planda kontrol ediliyor. Yeni bir şey geldiğinde burada görünecek.</p>
+      <h2>{unreadOnly ? t('feed.emptyUnread') : t('feed.empty')}</h2>
+      <p>{t('feed.emptyBody')}</p>
+    </div>
+  );
+}
+
+// Hızlı geçiş çipleri: kaynaklar (oyun/akış) ya da türler (yama notu, duyuru ...)
+function ChipRow({ chips, label, onSelect }) {
+  if (chips.length === 0) return null;
+  return (
+    <div className="chips" role="group" aria-label={label}>
+      {chips.map((chip) => (
+        <button key={chip.id ?? 'all'} className="chip" aria-pressed={chip.active} onClick={() => onSelect(chip.id)}>
+          {chip.label}
+          {chip.count > 0 && <span className="chip-count">{chip.count}</span>}
+        </button>
+      ))}
     </div>
   );
 }
 
 export default function Feed({
-  ready, title, items, unreadCount, unreadOnly, onToggleUnread, sourceNames,
-  needsSetup, onOpenSettings, onOpen, onMarkRead, onMarkAllRead, now
+  ready, title, eyebrow, chips, onSelectChip, typeChips, onSelectTypeChip, items, unreadCount, unreadOnly, onToggleUnread,
+  sourceNames, onSelectOrigin, needsSetup, onOpenSettings, onOpen, onMarkRead, onMarkAllRead, now
 }) {
+  const { t, time } = useI18n();
   return (
     <main className="feed">
       <header className="feed-header">
         <div>
+          {eyebrow && <p className="feed-eyebrow">{eyebrow}</p>}
           <h1>{title}</h1>
           <p className="feed-sub">
-            {unreadCount > 0 ? `${unreadCount} okunmamış` : 'Hepsi okundu'}
+            {unreadCount > 0 ? t('feed.unread', { count: unreadCount }) : t('feed.allRead')}
           </p>
         </div>
         <div className="feed-tools">
-          <div className="segmented" role="group" aria-label="Görünüm">
-            <button aria-pressed={!unreadOnly} onClick={() => onToggleUnread(false)}>Tümü</button>
-            <button aria-pressed={unreadOnly} onClick={() => onToggleUnread(true)}>Okunmamış</button>
+          <div className="segmented" role="group" aria-label={t('feed.view')}>
+            <button aria-pressed={!unreadOnly} onClick={() => onToggleUnread(false)}>{t('feed.all')}</button>
+            <button aria-pressed={unreadOnly} onClick={() => onToggleUnread(true)}>{t('feed.unreadOnly')}</button>
           </div>
           <button className="btn" onClick={onMarkAllRead} disabled={unreadCount === 0}>
-            Tümünü okundu say
+            {t('feed.markAllRead')}
           </button>
         </div>
+
+        <ChipRow chips={chips} label={t('feed.filter')} onSelect={onSelectChip} />
+        <ChipRow chips={typeChips} label={t('feed.typeFilter')} onSelect={onSelectTypeChip} />
       </header>
 
       <div className="feed-body">
@@ -62,33 +88,37 @@ export default function Feed({
           <EmptyState needsSetup={needsSetup} unreadOnly={unreadOnly} onOpenSettings={onOpenSettings} />
         )}
 
-        {groupByDay(items).map((group) => (
+        {groupByDay(items, time.dayLabel).map((group) => (
           <section key={group.label} className="day">
             <h2 className="day-label">{group.label}</h2>
             <ol className="items">
               {group.items.map((n) => (
                 <li key={n.id} className="item" data-read={n.read} data-level={n.level}>
-                  <time className="item-time" dateTime={new Date(n.createdAt).toISOString()} title={relativeTime(n.createdAt, now)}>
-                    {clock(n.createdAt)}
+                  <time className="item-time" dateTime={new Date(n.createdAt).toISOString()} title={time.relativeTime(n.createdAt, now)}>
+                    {time.clock(n.createdAt)}
                   </time>
-                  <button className="item-main" onClick={() => onOpen(n)}>
-                    <span className="item-title">
-                      {n.title}
-                      {n.url && <ExternalIcon />}
-                    </span>
-                    <span className="item-meta">
-                      <span className="item-source">{sourceNames[n.source] ?? n.source}</span>
-                      {n.body && <span className="item-body">{n.body}</span>}
-                    </span>
-                    {n.tags.length > 0 && (
-                      <span className="tags">
-                        {n.tags.map((t) => <span key={t} className="tag">{t}</span>)}
+                  <div className="item-content">
+                    {/* Nereden geldiği: tıklanınca akış o oyun/akışa göre filtrelenir */}
+                    <button className="origin" onClick={() => onSelectOrigin(n)} title={t('feed.originFilter')}>
+                      <span className="origin-source">{sourceNames[n.source] ?? n.source}</span>
+                      {n.body && <span className="origin-detail">{n.body}</span>}
+                    </button>
+                    <button className="item-main" onClick={() => onOpen(n)}>
+                      <span className="item-title">
+                        {n.title}
+                        {n.url && <ExternalIcon />}
                       </span>
-                    )}
-                  </button>
+                      {n.meta?.excerpt && <span className="item-excerpt">{n.meta.excerpt}</span>}
+                      {n.tags.length > 0 && (
+                        <span className="tags">
+                          {n.tags.map((tag) => <span key={tag} className="tag">{t(tag)}</span>)}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                   {!n.read && (
                     <button className="item-mark" onClick={() => onMarkRead(n)}>
-                      Okundu say
+                      {t('feed.markRead')}
                     </button>
                   )}
                 </li>

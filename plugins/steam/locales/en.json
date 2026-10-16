@@ -1,0 +1,44 @@
+{
+  "errors": {
+    "timeout": "Steam did not respond within 20 seconds. Check your connection.",
+    "network": "Could not reach Steam. Check your internet connection.",
+    "rateLimited": "Steam's request limit was reached. It will be retried on the next check.",
+    "http": "Steam returned an unexpected response ({status}). It will be retried on the next check.",
+    "badJson": "Could not read Steam's response. It will be retried on the next check.",
+    "noNews": "Steam returned no news for this game (App ID {appId}). Check the game in the settings."
+  },
+  "tag": {
+    "announcement": "Announcement",
+    "patchNotes": "Patch notes",
+    "hotfix": "Hotfix",
+    "update": "Update"
+  },
+  "unknownApp": "Steam app {appId}",
+  "untitled": "(untitled)",
+  "suggest": {
+    "detail": "App ID {appId}"
+  },
+  "manifest": {
+    "description": "Notifies you about Steam news and patch notes for the games you follow.",
+    "setup": {
+      "title": "No games added yet",
+      "body": "Search for the games whose news you want to follow by name in the settings and add them. New news show up here as notifications; when you add a game only its latest 3 news arrive.",
+      "action": "Add game"
+    },
+    "settings": {
+      "games": {
+        "label": "Games",
+        "addLabel": "Add manually",
+        "help": "Search for a game by name and pick it from the results. If you know the App ID, you can also enter it with \"Add manually\".",
+        "suggest": { "placeholder": "Search games by name" },
+        "item": {
+          "appId": { "label": "App ID" },
+          "name": { "label": "Game", "placeholder": "Optional" }
+        }
+      },
+      "officialOnly": { "label": "Official announcements only (hide press news)" },
+      "patchNotesOnly": { "label": "Patch notes only (Steam's patch notes tag or \"patch notes\" in the title)" },
+      "interval": { "label": "Check interval (minutes)" }
+    }
+  }
+}

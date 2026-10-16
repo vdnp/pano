@@ -2,6 +2,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { vi } from 'vitest';
+import { createI18n, mergeCatalogs } from '../shared/i18n.js';
+import { appCatalogs } from '../locales/index.js';
+
+// Eklentinin gerçek kataloglarıyla çeviri nesnesi (createContext'in getI18n'i için)
+export function pluginI18n(name, locale = 'tr') {
+  const dir = path.join(process.cwd(), 'plugins', name, 'locales');
+  const read = (l) => {
+    const file = path.join(dir, `${l}.json`);
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  };
+  return createI18n({ locale, catalogs: mergeCatalogs(appCatalogs, { [name]: { tr: read('tr'), en: read('en') } }) });
+}
 
 export function silentLogger() {
   return { log: vi.fn(), warn: vi.fn(), error: vi.fn() };

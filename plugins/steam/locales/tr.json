@@ -1,0 +1,21 @@
+{
+  "errors": {
+    "timeout": "Steam 20 saniye içinde yanıt vermedi. Bağlantını kontrol et.",
+    "network": "Steam'e ulaşılamadı. İnternet bağlantını kontrol et.",
+    "rateLimited": "Steam istek sınırına ulaşıldı. Bir sonraki kontrolde tekrar denenecek.",
+    "http": "Steam beklenmeyen bir yanıt verdi ({status}). Bir sonraki kontrolde tekrar denenecek.",
+    "badJson": "Steam'den gelen yanıt okunamadı. Bir sonraki kontrolde tekrar denenecek.",
+    "noNews": "Steam bu oyun için haber vermedi (App ID {appId}). Ayarlardan oyunu kontrol et."
+  },
+  "tag": {
+    "announcement": "Duyuru",
+    "patchNotes": "Yama notu",
+    "hotfix": "Hotfix",
+    "update": "Güncelleme"
+  },
+  "unknownApp": "Steam uygulaması {appId}",
+  "untitled": "(başlıksız)",
+  "suggest": {
+    "detail": "App ID {appId}"
+  }
+}

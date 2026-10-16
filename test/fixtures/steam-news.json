@@ -1,0 +1,75 @@
+{
+  "appnews": {
+    "appid": 730,
+    "newsitems": [
+      {
+        "gid": "1846651706675829",
+        "title": "Counter-Strike 2 Update",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1846651706675829",
+        "is_external_url": true,
+        "author": "Valve",
+        "contents": "[p]\\[ UI ][/p][p]Demo/Replay viewer improvements:[/p][list][*][p]Added a progress bar for demo/replay downloads[/p][/*][*][p]Camera controls now use click-and-drag scheme[/p][/*][/list][p]\\[ MISC ][/p][list][*][p]Updated AUG reload animation[/p][/*][/list]",
+        "feedlabel": "Community Announcements",
+        "date": 1792018968,
+        "feedname": "steam_community_announcements",
+        "feed_type": 1,
+        "appid": 730,
+        "tags": ["patchnotes", "mod_reviewed", "ModAct_487176015_1792019293_0"]
+      },
+      {
+        "gid": "1846018067932423",
+        "title": "Valve ускорила перезарядку AUG",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/PlayGround.ru/1846018067932423",
+        "is_external_url": true,
+        "author": "",
+        "contents": "<img src=\"https://i.playground.ru/e/x.png\"/>\n  <br />\n   <p>Valve &amp; CS2: AUG artık daha hızlı &#39;şarjör&#39; değiştiriyor.</p><script>alert(1)</script>",
+        "feedlabel": "PlayGround.ru",
+        "date": 1791530925,
+        "feedname": "PlayGround.ru",
+        "feed_type": 0,
+        "appid": 730
+      },
+      {
+        "gid": "1846018067924633",
+        "title": "Inside the Trove of Terror",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1846018067924633",
+        "is_external_url": true,
+        "author": "eugenep",
+        "contents": "[p][img src=\"{STEAM_CLAN_LOC_IMAGE}/3703047/44e04da4.png\"][/img][/p][p]Some time ago, we began to set our minds on [b]matters of the monstrous[/b]. Read more on the [url=https://www.dota2.com/trove]event page[/url].[/p][previewyoutube=abc123;full][/previewyoutube]",
+        "feedlabel": "Community Announcements",
+        "date": 1791332561,
+        "feedname": "steam_community_announcements",
+        "feed_type": 1,
+        "appid": 730
+      },
+      {
+        "gid": "1845383656394875",
+        "title": "Counter-Strike 2 Update",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1845383656394875",
+        "is_external_url": true,
+        "author": "Valve",
+        "contents": "[p]\\[ MAPS ][/p][list][*][p]Fixed a bug on Dust II[/p][/*][/list]",
+        "feedlabel": "Community Announcements",
+        "date": 1791243583,
+        "feedname": "steam_community_announcements",
+        "feed_type": 1,
+        "appid": 730,
+        "tags": ["patchnotes"]
+      },
+      {
+        "gid": "1844751498218029",
+        "title": "Gameplay Patch 7.41e",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1844751498218029",
+        "is_external_url": true,
+        "author": "Valve",
+        "contents": "[p]Etiketsiz bir yama duyurusu.[/p]",
+        "feedlabel": "Community Announcements",
+        "date": 1790159109,
+        "feedname": "steam_community_announcements",
+        "feed_type": 1,
+        "appid": 730
+      }
+    ],
+    "count": 1772
+  }
+}

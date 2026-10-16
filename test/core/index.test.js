@@ -133,9 +133,14 @@ describe('createCore', () => {
     const seen = [];
     core.bus.on('app:settingsChanged', (s) => seen.push(s));
 
-    expect(core.getAppSettings()).toEqual({ openAtLogin: false, pauseNotifications: false });
+    expect(core.getAppSettings()).toEqual({ openAtLogin: false, pauseNotifications: false, language: 'system' });
     core.setAppSettings({ pauseNotifications: 'evet', bilinmeyen: true });
-    expect(core.getAppSettings()).toEqual({ openAtLogin: false, pauseNotifications: true });
-    expect(seen).toEqual([{ openAtLogin: false, pauseNotifications: true }]);
+    expect(core.getAppSettings()).toEqual({ openAtLogin: false, pauseNotifications: true, language: 'system' });
+    expect(seen).toEqual([{ openAtLogin: false, pauseNotifications: true, language: 'system' }]);
+
+    // Dil yalnızca desteklenen değerlerden biri olabilir; geçersiz değer yok sayılır
+    core.setAppSettings({ language: 'en' });
+    core.setAppSettings({ language: 'de' });
+    expect(core.getAppSettings().language).toBe('en');
   });
 });

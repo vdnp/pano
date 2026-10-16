@@ -23,10 +23,13 @@ export function createScheduler({ bus, logger }) {
       await job.fn();
       job.status.state = 'ok';
       job.status.error = null;
+      job.status.errorI18n = null;
       job.status.lastSuccess = Date.now();
     } catch (err) {
       job.status.state = 'error';
       job.status.error = err?.message ?? String(err);
+      // Çevrilebilir hatanın anahtarı: arayüz dil değişince mesajı yeniden çevirir
+      job.status.errorI18n = err?.i18n ?? null;
       logger.warn(`[${job.key}]`, job.status.error);
     } finally {
       job.running = false;
@@ -41,7 +44,7 @@ export function createScheduler({ bus, logger }) {
       const job = {
         key, fn, intervalMs, meta,
         timer: null, running: false, stopped: false,
-        status: { state: 'idle', error: null, lastRun: null, lastSuccess: null, nextRun: null }
+        status: { state: 'idle', error: null, errorI18n: null, lastRun: null, lastSuccess: null, nextRun: null }
       };
       jobs.set(key, job);
       plan(job, 1000 + Math.random() * 2000); // açılışta hepsi aynı anda vurmasın
@@ -54,6 +57,23 @@ export function createScheduler({ bus, logger }) {
       job.intervalMs = intervalMs;
       if (!job.running) plan(job, intervalMs);
       emit(job);
+    },
+
+    // Başlık gibi görünen bilgiler değişince zamanlamaya dokunmadan güncellenir
+    setMeta(key, meta) {
+      const job = jobs.get(key);
+      if (!job) return;
+      job.meta = meta;
+      emit(job);
+    },
+
+    // Çalışmakta olan iş biter ama yeniden zamanlanmaz
+    remove(key) {
+      const job = jobs.get(key);
+      if (!job) return;
+      job.stopped = true;
+      clearTimeout(job.timer);
+      jobs.delete(key);
     },
 
     runNow: (key) => (jobs.has(key) ? execute(jobs.get(key)) : undefined),

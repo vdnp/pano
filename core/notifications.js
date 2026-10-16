@@ -14,7 +14,9 @@ function normalize(raw) {
     createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(),
     receivedAt: Date.now(),
     read: false,
-    meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {}
+    meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},
+    // Bildirimi üreten kaynak işi (ör. news-730); core yazar, arayüz filtrelemede kullanır
+    job: raw.job ? String(raw.job) : null
   };
 }
 
@@ -56,13 +58,17 @@ export function createNotificationStore(storage, bus) {
       return true;
     },
 
-    markRead(id) {
-      repo.markRead(id);
+    // id ya da id listesi (ör. yalnızca görünen bildirimler); liste tek seferde işlenir
+    markRead(ids) {
+      storage.transaction(() => {
+        for (const id of Array.isArray(ids) ? ids : [ids]) repo.markRead(String(id));
+      });
       changed();
     },
 
-    markAllRead(source) {
-      repo.markAllRead(source);
+    // job verilirse yalnızca o işin (ör. tek bir oyunun) bildirimleri
+    markAllRead(source, job) {
+      repo.markAllRead(source, job);
       changed();
     },
 

@@ -3,6 +3,20 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const LOCALE_FILES = ['tr', 'en'];
+
+// Eklentinin locales/<dil>.json katalogları; olmayan dosya sorun değil, bozuk dosya loglanır
+async function readLocales(root, logger) {
+  const locales = {};
+  for (const locale of LOCALE_FILES) {
+    try {
+      locales[locale] = JSON.parse(await readFile(path.join(root, 'locales', `${locale}.json`), 'utf8'));
+    } catch (err) {
+      if (err.code !== 'ENOENT') logger.warn(`Dil dosyası okunamadı (${root}, ${locale}):`, err.message);
+    }
+  }
+  return locales;
+}
 
 function validateManifest(manifest) {
   if (!manifest || typeof manifest !== 'object') throw new Error('manifest.json okunamadı');
@@ -42,7 +56,7 @@ export async function loadPlugins(dirs, logger) {
         if (!mod || typeof mod !== 'object') throw new Error('varsayılan export bir nesne olmalı');
 
         seen.add(manifest.name);
-        plugins.push({ manifest, module: mod, root });
+        plugins.push({ manifest, module: mod, root, locales: await readLocales(root, logger) });
         logger.log(`Eklenti yüklendi: ${manifest.name}`);
       } catch (err) {
         logger.error(`Eklenti yüklenemedi (${root}):`, err.message);

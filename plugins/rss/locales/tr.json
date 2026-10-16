@@ -1,0 +1,16 @@
+{
+  "errors": {
+    "badUrl": "Akış adresi http:// veya https:// ile başlamalı. Ayarlardan adresi düzelt.",
+    "timeout": "Akış 20 saniye içinde yanıt vermedi. Adresi ve bağlantını kontrol et.",
+    "network": "Akışa ulaşılamadı. İnternet bağlantını ve adresi kontrol et.",
+    "notFound": "Akış bulunamadı ({status}). Adresi kontrol et.",
+    "http": "Akış sunucusu beklenmeyen bir yanıt verdi ({status}). Bir sonraki kontrolde tekrar denenecek.",
+    "notFeed": "Bu adres bir RSS veya Atom akışı değil.",
+    "xmlInvalid": "Akış okunamadı: XML bozuk (satır {line}).",
+    "unreadable": "Akış okunamadı: {reason}"
+  },
+  "tag": {
+    "announcement": "Duyuru"
+  },
+  "untitled": "(başlıksız)"
+}

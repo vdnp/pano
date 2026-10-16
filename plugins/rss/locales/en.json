@@ -1,0 +1,36 @@
+{
+  "errors": {
+    "badUrl": "The feed address must start with http:// or https://. Fix the address in the settings.",
+    "timeout": "The feed did not respond within 20 seconds. Check the address and your connection.",
+    "network": "Could not reach the feed. Check your internet connection and the address.",
+    "notFound": "Feed not found ({status}). Check the address.",
+    "http": "The feed server returned an unexpected response ({status}). It will be retried on the next check.",
+    "notFeed": "This address is not an RSS or Atom feed.",
+    "xmlInvalid": "Could not read the feed: malformed XML (line {line}).",
+    "unreadable": "Could not read the feed: {reason}"
+  },
+  "tag": {
+    "announcement": "Announcement"
+  },
+  "untitled": "(untitled)",
+  "manifest": {
+    "description": "Notifies you about new entries in RSS and Atom feeds.",
+    "setup": {
+      "title": "No feeds added yet",
+      "body": "Add the RSS or Atom address of the blogs, news sites or projects you want to follow. New posts show up here as notifications; when you add a feed only its latest 5 entries arrive.",
+      "action": "Add feed"
+    },
+    "settings": {
+      "feeds": {
+        "label": "Feeds",
+        "addLabel": "Add feed",
+        "help": "Each row is a separate feed. If the display name is empty, the feed's own title is used. Only the latest 5 entries of a newly added feed are notified.",
+        "item": {
+          "url": { "label": "Address", "placeholder": "https://example.com/feed.xml" },
+          "name": { "label": "Display name", "placeholder": "Optional" }
+        }
+      },
+      "interval": { "label": "Check interval (minutes)" }
+    }
+  }
+}

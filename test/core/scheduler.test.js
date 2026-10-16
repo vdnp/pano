@@ -131,10 +131,50 @@ describe('scheduler', () => {
     expect(scheduler.statuses()[0].nextRun).toBe(Date.now() + 2 * MINUTE);
   });
 
-  it('bilinmeyen anahtarda reschedule ve runNow sessizce geçer', () => {
+  it('bilinmeyen anahtarda reschedule, setMeta, remove ve runNow sessizce geçer', () => {
     const { scheduler } = setup();
     expect(() => scheduler.reschedule('yok', MINUTE)).not.toThrow();
+    expect(() => scheduler.setMeta('yok', {})).not.toThrow();
+    expect(() => scheduler.remove('yok')).not.toThrow();
     expect(scheduler.runNow('yok')).toBeUndefined();
+  });
+
+  it('setMeta zamanlamaya dokunmadan başlığı günceller', async () => {
+    const { scheduler, statuses } = setup();
+    scheduler.add('demo/a', vi.fn(), MINUTE, { plugin: 'demo', title: 'Eski' });
+    const { nextRun } = scheduler.statuses()[0];
+
+    await vi.advanceTimersByTimeAsync(500);
+    scheduler.setMeta('demo/a', { plugin: 'demo', title: 'Yeni' });
+    expect(scheduler.statuses()[0]).toMatchObject({ title: 'Yeni', nextRun });
+    expect(statuses.at(-1).title).toBe('Yeni');
+  });
+
+  it('remove işi siler ve bir daha çalıştırmaz', async () => {
+    const { scheduler } = setup();
+    const a = vi.fn();
+    const b = vi.fn();
+    scheduler.add('demo/a', a, MINUTE);
+    scheduler.add('demo/b', b, MINUTE);
+
+    scheduler.remove('demo/a');
+    expect(scheduler.statuses().map((s) => s.key)).toEqual(['demo/b']);
+    await vi.advanceTimersByTimeAsync(10 * MINUTE);
+    expect(a).not.toHaveBeenCalled();
+    expect(b).toHaveBeenCalled();
+  });
+
+  it('çalışırken silinen iş biter ama yeniden zamanlanmaz', async () => {
+    const { scheduler } = setup();
+    const job = deferredJob();
+    scheduler.add('demo/a', job.fn, MINUTE);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    scheduler.remove('demo/a');
+    job.resolve();
+    await vi.advanceTimersByTimeAsync(10 * MINUTE);
+    expect(job.fn).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('stopAll sonrası hiçbir iş çalışmaz', async () => {

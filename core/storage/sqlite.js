@@ -15,7 +15,8 @@ const toRow = (n) => ({
   created_at: n.createdAt,
   received_at: n.receivedAt ?? n.createdAt,
   read: n.read ? 1 : 0,
-  meta: JSON.stringify(n.meta ?? {})
+  meta: JSON.stringify(n.meta ?? {}),
+  job: n.job ?? null
 });
 
 const fromRow = (r) => ({
@@ -29,7 +30,8 @@ const fromRow = (r) => ({
   createdAt: r.created_at,
   receivedAt: r.received_at,
   read: r.read === 1,
-  meta: JSON.parse(r.meta)
+  meta: JSON.parse(r.meta),
+  job: r.job ?? null
 });
 
 // Node'un yerleşik SQLite'ı (node:sqlite). Electron ve test ortamı aynı modülü
@@ -63,15 +65,16 @@ export function createSqliteStorage(file = ':memory:') {
     has: db.prepare('SELECT 1 FROM notifications WHERE id = ?'),
     insert: db.prepare(`
       INSERT OR IGNORE INTO notifications
-        (id, source, title, body, url, level, tags, created_at, received_at, read, meta)
+        (id, source, title, body, url, level, tags, created_at, received_at, read, meta, job)
       VALUES
-        (:id, :source, :title, :body, :url, :level, :tags, :created_at, :received_at, :read, :meta)`),
+        (:id, :source, :title, :body, :url, :level, :tags, :created_at, :received_at, :read, :meta, :job)`),
     // Aynı createdAt'te sonradan eklenen önce gelir
     list: db.prepare('SELECT * FROM notifications ORDER BY created_at DESC, rowid DESC'),
     count: db.prepare('SELECT count(*) AS c FROM notifications'),
     markRead: db.prepare('UPDATE notifications SET read = 1 WHERE id = ?'),
     markAllRead: db.prepare('UPDATE notifications SET read = 1'),
     markSourceRead: db.prepare('UPDATE notifications SET read = 1 WHERE source = ?'),
+    markJobRead: db.prepare('UPDATE notifications SET read = 1 WHERE source = ? AND job = ?'),
     clear: db.prepare('DELETE FROM notifications'),
     clearSource: db.prepare('DELETE FROM notifications WHERE source = ?'),
     prune: db.prepare(`
@@ -101,7 +104,8 @@ export function createSqliteStorage(file = ':memory:') {
       insert: (item) => q.insert.run(toRow(item)).changes > 0,
       list: () => q.list.all().map(fromRow),
       markRead: (id) => q.markRead.run(id),
-      markAllRead: (source) => (source ? q.markSourceRead.run(source) : q.markAllRead.run()),
+      markAllRead: (source, job) =>
+        job ? q.markJobRead.run(source, job) : source ? q.markSourceRead.run(source) : q.markAllRead.run(),
       clear: (source) => (source ? q.clearSource.run(source) : q.clear.run()),
       // En yeni max kaydı tutar, gerisini siler
       prune: (max) => q.prune.run(max)

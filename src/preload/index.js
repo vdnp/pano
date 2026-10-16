@@ -15,7 +15,8 @@ contextBridge.exposeInMainWorld('pano', {
     list: invoke('sources:list'),
     runNow: invoke('sources:runNow'),
     updateSettings: invoke('sources:updateSettings'),
-    setSecret: invoke('sources:setSecret')
+    setSecret: invoke('sources:setSecret'),
+    suggest: invoke('sources:suggest')
   },
   appSettings: {
     get: invoke('appSettings:get'),

@@ -1,30 +1,16 @@
 const API = 'https://api.github.com/notifications';
 
-const REASONS = {
-  approval_requested: 'Onay istendi',
-  assign: 'Sana atandı',
-  author: 'Senin açtığın',
-  ci_activity: 'CI',
-  comment: 'Yorum',
-  invitation: 'Davet',
-  manual: 'Takip ettiğin',
-  mention: 'Senden bahsedildi',
-  review_requested: 'İnceleme istendi',
-  security_alert: 'Güvenlik uyarısı',
-  state_change: 'Durum değişti',
-  subscribed: 'Abone olduğun',
-  team_mention: 'Takımından bahsedildi'
-};
+// Tanınan sebep ve türler bildirim etiketinde çeviri anahtarı olarak saklanır
+// (github:reason.mention); bilinmeyen yeni değerler GitHub'ın verdiği haliyle kalır.
+const REASONS = new Set([
+  'approval_requested', 'assign', 'author', 'ci_activity', 'comment', 'invitation', 'manual',
+  'mention', 'review_requested', 'security_alert', 'state_change', 'subscribed', 'team_mention'
+]);
+const TYPES = new Set([
+  'Issue', 'PullRequest', 'Release', 'Commit', 'Discussion', 'CheckSuite', 'RepositoryVulnerabilityAlert'
+]);
 
-const TYPES = {
-  Issue: 'Issue',
-  PullRequest: 'Pull request',
-  Release: 'Sürüm',
-  Commit: 'Commit',
-  Discussion: 'Tartışma',
-  CheckSuite: 'Kontrol',
-  RepositoryVulnerabilityAlert: 'Güvenlik'
-};
+const tagFor = (ctx, kind, known, value) => (known.has(value) ? ctx.key(`${kind}.${value}`) : value);
 
 // API adresini tarayıcıda açılabilir sayfa adresine çevirir.
 function htmlUrl(n) {
@@ -41,17 +27,17 @@ function htmlUrl(n) {
   return `${repo}/releases`;
 }
 
-function describeError(res) {
-  if (res.status === 401) return 'GitHub anahtarı geçersiz veya süresi dolmuş.';
+function describeError(ctx, res) {
+  if (res.status === 401) return ctx.error('errors.invalidToken');
   if (res.status === 403 || res.status === 429) {
     const reset = Number(res.headers.get('x-ratelimit-reset'));
     if (res.headers.get('x-ratelimit-remaining') === '0' && reset) {
-      const at = new Date(reset * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-      return `GitHub istek sınırına ulaşıldı. ${at} sonrasında tekrar denenecek.`;
+      // Saat, mesaj gösterilirken uygulama dilinin biçimiyle yazılır
+      return ctx.error('errors.rateLimited', { at: reset * 1000 });
     }
-    return 'GitHub erişimi reddetti. Anahtarın notifications iznine sahip olduğunu kontrol et.';
+    return ctx.error('errors.forbidden');
   }
-  return `GitHub beklenmeyen bir yanıt verdi (${res.status}).`;
+  return ctx.error('errors.http', { status: res.status });
 }
 
 export default {
@@ -61,7 +47,7 @@ export default {
 
       async run(ctx) {
         const token = ctx.secrets.get('token');
-        if (!token) throw new Error('Erişim anahtarı eklenmedi. Ayarlardan bir GitHub token\'ı gir.');
+        if (!token) throw ctx.error('errors.noToken');
 
         const query = new URLSearchParams({
           per_page: '50',
@@ -83,7 +69,7 @@ export default {
 
         const res = await ctx.fetch(`${API}?${query}`, { headers });
         if (res.status === 304) return;
-        if (!res.ok) throw new Error(describeError(res));
+        if (!res.ok) throw describeError(ctx, res);
 
         const items = await res.json();
         let added = 0;
@@ -92,11 +78,11 @@ export default {
           const isNew = ctx.notify({
             // updated_at sayesinde aynı konuya gelen yeni hareket yeniden bildirilir
             id: `${n.id}:${n.updated_at}`,
-            title: n.subject?.title ?? '(başlıksız)',
+            title: n.subject?.title ?? ctx.t('untitled'),
             body: n.repository?.full_name ?? '',
             url: htmlUrl(n),
             level: n.reason === 'security_alert' ? 'warning' : 'info',
-            tags: [TYPES[n.subject?.type] ?? n.subject?.type, REASONS[n.reason] ?? n.reason],
+            tags: [tagFor(ctx, 'type', TYPES, n.subject?.type), tagFor(ctx, 'reason', REASONS, n.reason)],
             createdAt: Date.parse(n.updated_at),
             meta: {
               threadId: n.id,

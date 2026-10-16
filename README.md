@@ -88,12 +88,66 @@ export default {
 ```
 
 `ctx` içeriği: `log`, `warn`, `notify`, `fetch` (20 sn zaman aşımlı),
-`settings.get`, `secrets.get`, `state.get/set` (eklentiye özel kalıcı veri).
+`settings.get`, `secrets.get`, `state.get/set` (eklentiye özel kalıcı veri), `parseXml`.
+Ayarlara göre değişen kaynaklar için `sources` bir fonksiyon olabilir: `sources(settings)`
+her ayar kaydında yeniden çağrılır (örnek: `plugins/rss`). Ayar türleri: `number`, `boolean`,
+`string` ve satır ekleyip silinebilen `list`.
 `run` bir hata fırlatırsa mesajı kaynağın durum satırında gösterilir.
+
+## Denemek için örnek kaynaklar
+
+Aşağıdakiler 16 Ekim 2026'da gerçek eklentilerle denendi. Ayarlar panelinde satır ekleyip
+kaydetmen yeterli; ilk eklemede RSS'ten akış başına 5, Steam'den oyun başına 3 kayıt gelir.
+
+**RSS / Atom** (RSS → Ayarlar → Akış ekle → Adres):
+
+| Adres | Biçim | Not |
+|---|---|---|
+| https://hnrss.org/frontpage | RSS | Sık güncellenir, yeni giriş testi için iyi |
+| https://github.com/electron/electron/releases.atom | Atom | Sürüm notları |
+| https://www.theverge.com/rss/index.xml | Atom | Teknoloji haberleri |
+| https://feeds.bbci.co.uk/turkce/rss.xml | RSS | Türkçe içerik |
+| https://nodejs.org/en/feed/blog.xml | RSS | Seyrek güncellenir |
+| https://store.steampowered.com/feeds/news/app/730/ | RSS | Steam haberlerini RSS ile karşılaştırmak için |
+| https://example.com/yok-feed.xml | – | Hata testi: "Akış bulunamadı (404)" |
+| https://example.com/ | – | Hata testi: "Bu adres bir RSS veya Atom akışı değil" |
+
+**Steam** (Steam → Ayarlar → arama kutusuna oyun adı yaz, sonuçtan seç; ya da Elle ekle → App ID):
+
+| Oyun | App ID | Not |
+|---|---|---|
+| Counter-Strike 2 | 730 | Sık yama notu; "Sadece yama notları" filtresini denemek için |
+| Dota 2 | 570 | Resmî duyurular ve yama notları karışık |
+| Cyberpunk 2077 | 1091500 | "Sadece resmî duyurular" kapatılınca çok sayıda basın haberi gelir |
+| Stardew Valley | 413150 | Seyrek haber |
+| (olmayan) | 999999999 | Hata testi: "Steam bu oyun için haber vermedi" |
+
+Arama kutusu için: `counter`, `cyberpunk`, `stardew` gibi en az 2 karakterlik sorgular.
 
 ## Sonraki aşamalar
 
 - `providers` ve `widgets` katkı türleri (oyun profilleri, istatistik kartları)
 - `commands` katkı türü ve komut paleti
 - Bildirim olaylarına bağlanan otomasyon kuralları
-- Sistem tepsisi: pencere kapansa da arka planda çalışmaya devam etme
+
+## Yapılacaklar (ertelenenler)
+
+- **DeepL çeviri eklentisi.** Bildirim başlığı ve özetini istek üzerine ("Çevir" düğmesi)
+  uygulama diline çevirir. Tasarım: core'da yeni `translator` katkı türü ve
+  `notifications.translate(id)`; çeviriler ayrı bir tabloda önbelleğe alınır (yeni migration);
+  `plugins/deepl` API anahtarını gizli alanda tutar, varsayılan kapalıdır ve içeriğin DeepL'e
+  gönderildiğini açıkça yazar. Doğrulanan API bilgileri (Ekim 2026): `POST /v2/translate`,
+  Free `api-free.deepl.com` / Pro `api.deepl.com`, başlık `Authorization: DeepL-Auth-Key <anahtar>`,
+  gövde `{ text: [...], target_lang }`, kaynak dil yanıtta `detected_source_language`;
+  hatalar 403 anahtar, 429/529 sık istek, 456 kota, 413 boyut (128 KiB); kullanım
+  `GET /v2/usage`. Belgede doğrulanamayanlar: Free anahtarın `:fx` ile bittiği ve düz `EN`'in
+  hedef olarak kabulü (`EN-US` kullanılacak, Türkçe `TR`).
+- **Okuyucu paneli, Aşama B: "Tam metni getir".** İçeriği olmayan bildirimler (GitHub, yalnızca
+  özet veren RSS) için main sayfayı indirir (yalnızca http(s), boyut/zaman sınırlı, çerezsiz),
+  arayüz Mozilla Readability ile makaleyi çıkarıp aynı güvenli blok modeliyle gösterir.
+- **Okuyucu paneli, Aşama C: görseller.** CSP gevşetilmeden: main görseli boyut sınırıyla
+  indirip `data:` adresine çevirir.
+- **Microsoft Store için "Bilgisayar açılınca başlat".** MSIX paketinde
+  `app.setLoginItemSettings` çalışmaz; paket bildirimine `StartupTask` eklenmeli.
+- **Uygulama ikonu ve Store kutucuk görselleri.**
+- **winget manifesti** (kurulum dosyası GitHub Releases'ta yayınlandıktan sonra).

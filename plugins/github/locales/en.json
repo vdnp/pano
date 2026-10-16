@@ -1,0 +1,47 @@
+{
+  "errors": {
+    "noToken": "No access key added. Enter a GitHub token in the settings.",
+    "invalidToken": "The GitHub key is invalid or has expired.",
+    "rateLimited": "GitHub's request limit was reached. It will be retried after {at, time}.",
+    "forbidden": "GitHub denied access. Check that the key has the notifications scope.",
+    "http": "GitHub returned an unexpected response ({status})."
+  },
+  "reason": {
+    "approval_requested": "Approval requested",
+    "assign": "Assigned to you",
+    "author": "You opened",
+    "ci_activity": "CI",
+    "comment": "Comment",
+    "invitation": "Invitation",
+    "manual": "Subscribed manually",
+    "mention": "You were mentioned",
+    "review_requested": "Review requested",
+    "security_alert": "Security alert",
+    "state_change": "State changed",
+    "subscribed": "Watching",
+    "team_mention": "Your team was mentioned"
+  },
+  "type": {
+    "Issue": "Issue",
+    "PullRequest": "Pull request",
+    "Release": "Release",
+    "Commit": "Commit",
+    "Discussion": "Discussion",
+    "CheckSuite": "Check",
+    "RepositoryVulnerabilityAlert": "Security"
+  },
+  "untitled": "(untitled)",
+  "manifest": {
+    "description": "Fetches your unread GitHub notifications.",
+    "settings": {
+      "interval": { "label": "Check interval (minutes)" },
+      "participatingOnly": { "label": "Only conversations I'm part of" }
+    },
+    "secrets": {
+      "token": {
+        "label": "Access key (classic token)",
+        "help": "Create a classic token and tick the notifications scope. Notifications from private repositories may also need the repo scope. Fine-grained tokens do not support the notifications API."
+      }
+    }
+  }
+}

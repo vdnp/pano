@@ -51,7 +51,8 @@ describe('notifications', () => {
         createdAt: 1000,
         receivedAt: NOW,
         read: false,
-        meta: { k: 1 }
+        meta: { k: 1 },
+        job: null
       });
     });
 

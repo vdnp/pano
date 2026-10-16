@@ -1,0 +1,42 @@
+{
+  "name": "steam",
+  "displayName": "Steam",
+  "version": "0.1.0",
+  "description": "Takip ettiğin oyunların Steam haberlerini ve yama notlarını bildirir.",
+  "main": "index.js",
+  "setup": {
+    "title": "Henüz oyun eklenmedi",
+    "body": "Haberlerini takip etmek istediğin oyunları ayarlardan adıyla arayıp ekle. Yeni haberler burada bildirim olarak görünür; ilk eklemede her oyundan yalnızca son 3 haber gelir.",
+    "action": "Oyun ekle"
+  },
+  "settings": {
+    "games": {
+      "type": "list",
+      "label": "Oyunlar",
+      "addLabel": "Elle ekle",
+      "help": "Oyunu adıyla ara ve sonuçtan seç. App ID'yi biliyorsan \"Elle ekle\" ile de yazabilirsin.",
+      "suggest": { "provider": "searchGames", "placeholder": "Oyun adıyla ara" },
+      "item": {
+        "appId": { "type": "number", "label": "App ID", "required": true, "min": 1 },
+        "name": { "type": "string", "label": "Oyun", "placeholder": "İsteğe bağlı" }
+      }
+    },
+    "officialOnly": {
+      "type": "boolean",
+      "label": "Sadece resmî duyurular (basın haberlerini gösterme)",
+      "default": true
+    },
+    "patchNotesOnly": {
+      "type": "boolean",
+      "label": "Sadece yama notları (Steam'in yama notu etiketi ya da başlıkta \"patch notes\")",
+      "default": false
+    },
+    "interval": {
+      "type": "number",
+      "label": "Kontrol sıklığı (dakika)",
+      "default": 30,
+      "min": 5,
+      "max": 1440
+    }
+  }
+}

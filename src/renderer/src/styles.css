@@ -36,7 +36,9 @@ button:disabled { cursor: default; opacity: 0.45; }
 h1, h2 { margin: 0; }
 
 /* Yerleşim */
-.shell { display: grid; grid-template-columns: 272px 1fr; height: 100%; }
+/* Satır pencere yüksekliğine sabit: sayfa değil yalnızca bildirim listesi kayar,
+   sol şerit ve altındaki uygulama ayarları yerinde kalır */
+.shell { display: grid; grid-template-columns: 272px 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; }
 
 /* Sol kaynak şeridi */
 .rail {
@@ -144,9 +146,35 @@ h1, h2 { margin: 0; }
   background: var(--muted);
   flex: none;
 }
-.source[data-state='ok'] .status-dot { background: var(--ok); }
-.source[data-state='error'] .status-dot { background: var(--err); }
-.source[data-state='running'] .status-dot { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+.source[data-state='ok'] .status-dot, .job[data-state='ok'] .status-dot { background: var(--ok); }
+.source[data-state='error'] .status-dot, .job[data-state='error'] .status-dot { background: var(--err); }
+.source[data-state='running'] .status-dot,
+.job[data-state='running'] .status-dot { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+
+/* Birden fazla işi olan eklentinin alt satırları (ör. her RSS akışı) */
+.job-list { list-style: none; margin: 0 0 6px; padding: 0 0 0 18px; }
+.job {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0 3px 10px;
+}
+/* Alt satır seçilebilir: akış o oyun/akışa göre filtrelenir */
+.job-main {
+  display: grid;
+  min-width: 0;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 6px;
+  text-align: left;
+}
+.job-main:hover, .job-main[aria-current] { background: var(--surface); }
+.job-title { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; }
+.job-name, .job-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job-status { font-size: 12px; color: var(--muted); }
+.job[data-state='error'] .job-status { color: var(--err); }
 
 @keyframes pulse { 50% { opacity: 0.3; } }
 
@@ -195,6 +223,28 @@ h1, h2 { margin: 0; }
 }
 
 .feed-header h1 { font: 600 30px/1.1 var(--display); }
+/* Bir oyun/akış seçiliyken başlığın üstünde ait olduğu eklenti */
+.feed-eyebrow { margin: 0 0 6px; color: var(--muted); font: 500 13px/1 var(--display); }
+
+/* Eklentinin kaynakları arasında hızlı geçiş */
+.chips { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+/* Tür çipleri kaynak çiplerinin hemen altında, daha sıkı */
+.chips + .chips { margin-top: -6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.chip:hover { color: var(--text); border-color: var(--muted); }
+.chip[aria-pressed='true'] { color: var(--text); background: var(--surface); border-color: var(--amber); }
+.chip-count { color: var(--amber); font-size: 12px; }
 .feed-sub { margin: 6px 0 0; color: var(--muted); }
 
 .feed-tools { display: flex; gap: 10px; align-items: center; }
@@ -228,7 +278,7 @@ h1, h2 { margin: 0; }
 .btn-primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
 .btn-primary:hover:not(:disabled) { border-color: var(--text); }
 
-.feed-body { flex: 1; overflow-y: auto; padding: 0 36px 48px; }
+.feed-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 36px 48px; }
 
 .day-label {
   position: sticky;
@@ -284,9 +334,36 @@ h1, h2 { margin: 0; }
 .item[data-read='false'] .item-title { color: var(--text); font-weight: 600; }
 .item-main:hover .item-title { text-decoration: underline; text-underline-offset: 3px; }
 
-.item-meta { display: flex; gap: 10px; color: var(--muted); font-size: 13px; min-width: 0; }
-.item-source { color: var(--text); font-weight: 600; }
-.item-body { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Kaynağın verdiği kısa özet (meta.excerpt): iki satırla sınırlı */
+.item-excerpt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.item-content { display: grid; justify-items: start; gap: 6px; min-width: 0; }
+
+/* Bildirimin nereden geldiği (eklenti · oyun/akış/depo); tıklanınca o kaynağa filtreler */
+.origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.origin:hover { border-color: var(--muted); }
+.origin-source { color: var(--text); font-weight: 700; flex: none; }
+.origin-detail { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.origin-detail::before { content: '·'; margin-right: 6px; }
 
 .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .tag {
@@ -313,6 +390,10 @@ h1, h2 { margin: 0; }
 .empty { max-width: 46ch; padding: 72px 0; }
 .empty h2 { font: 600 22px/1.2 var(--display); margin-bottom: 8px; }
 .empty p { color: var(--muted); margin: 0 0 20px; }
+
+/* Kurulum bekleyen eklentiler alt alta */
+.setup-list { display: grid; gap: 40px; padding: 72px 0; }
+.setup-list .empty { padding: 0; }
 
 /* Ayarlar paneli */
 .overlay {
@@ -353,10 +434,67 @@ h1, h2 { margin: 0; }
   padding: 9px 12px;
 }
 .field input:focus-visible { border-color: var(--focus); outline: none; }
+.field select {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  padding: 9px 12px;
+}
+.field select:focus-visible { border-color: var(--focus); outline: none; }
 .field-check label { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 .field-check input { width: 16px; height: 16px; accent-color: var(--amber); }
 
 .help { color: var(--muted); font-size: 13px; margin: 0; max-width: 60ch; }
+
+/* Liste türündeki ayarlar (ör. RSS akışları) */
+.list-field { border: 0; margin: 0; padding: 0; min-width: 0; }
+.list-field legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+.list-head, .list-row { display: grid; gap: 8px; align-items: center; }
+.list-head { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.list-field input[type='text'], .list-field input[type='number'] { min-width: 0; }
+.list-field input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--amber); }
+
+/* Öneri sağlayıcılı arama kutusu (ör. Steam'de oyun adıyla arama) */
+.suggest { position: relative; display: grid; gap: 6px; }
+.suggest input[type='search'] {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  padding: 9px 12px;
+}
+.suggest input[type='search']:focus-visible { border-color: var(--focus); outline: none; }
+.suggest-list {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.suggest-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.suggest-option[aria-selected='true'] { background: var(--line); }
+.suggest-option[aria-disabled='true'] { color: var(--muted); cursor: default; }
+.suggest-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-detail { flex: none; color: var(--muted); font-size: 12px; }
+.help-error { color: var(--err); }
 .field-links { display: flex; gap: 16px; }
 
 .link {

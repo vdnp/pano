@@ -21,7 +21,8 @@ describe('migrations', () => {
     expect(migrate(db)).toEqual({ from: 0, to: migrations.length });
     expect(version(db)).toBe(migrations.length);
     expect(tables(db)).toEqual([
-      'kv', 'notifications', 'notifications_created_at', 'notifications_read', 'notifications_source', 'schema_version'
+      'kv', 'notifications', 'notifications_created_at', 'notifications_read', 'notifications_source',
+      'notifications_source_job', 'schema_version'
     ]);
   });
 
@@ -61,6 +62,73 @@ describe('migrations', () => {
     const db = new DatabaseSync(':memory:');
     migrate(db, [() => {}, () => {}]);
     expect(() => migrate(db, [() => {}])).toThrow("Pano'yu güncelleyip tekrar aç");
+  });
+});
+
+describe('migration 2: etiketler çeviri anahtarına', () => {
+  function legacyDb(rows) {
+    const db = new DatabaseSync(':memory:');
+    migrate(db, migrations.slice(0, 1));
+    const insert = db.prepare(`INSERT INTO notifications (id, source, title, tags, created_at, received_at)
+      VALUES (?, ?, 'T', ?, 1, 1)`);
+    for (const [id, source, tags] of rows) insert.run(id, source, JSON.stringify(tags));
+    return db;
+  }
+  const tagsOf = (db, id) => JSON.parse(db.prepare('SELECT tags FROM notifications WHERE id = ?').get(id).tags);
+
+  it('bilinen Türkçe etiketleri kaynağa göre anahtara çevirir, bilinmeyenleri korur', () => {
+    const db = legacyDb([
+      ['rss:1', 'rss', ['Duyuru']],
+      ['steam:1', 'steam', ['Yama notu']],
+      ['steam:2', 'steam', ['Duyuru']],
+      ['github:1', 'github', ['Pull request', 'İnceleme istendi']],
+      ['github:2', 'github', ['YeniTur', 'yeni_sebep']],
+      ['diger:1', 'diger', ['Duyuru']]
+    ]);
+    migrate(db);
+
+    expect(version(db)).toBe(migrations.length);
+    expect(tagsOf(db, 'rss:1')).toEqual(['rss:tag.announcement']);
+    expect(tagsOf(db, 'steam:1')).toEqual(['steam:tag.patchNotes']);
+    expect(tagsOf(db, 'steam:2')).toEqual(['steam:tag.announcement']);
+    expect(tagsOf(db, 'github:1')).toEqual(['github:type.PullRequest', 'github:reason.review_requested']);
+    expect(tagsOf(db, 'github:2')).toEqual(['YeniTur', 'yeni_sebep']);
+    // Başka bir eklentinin aynı metinli etiketi o eklentiye ait değildir
+    expect(tagsOf(db, 'diger:1')).toEqual(['Duyuru']);
+  });
+
+  it('eşlenen her anahtarın eklenti kataloğunda karşılığı var', async () => {
+    const { pluginI18n } = await import('../helpers.js');
+    const db = legacyDb([
+      ['github:1', 'github', ['Issue', 'Sürüm', 'Tartışma', 'Kontrol', 'Güvenlik', 'Onay istendi', 'CI', 'Takımından bahsedildi']]
+    ]);
+    migrate(db);
+    const i18n = pluginI18n('github', 'en');
+    for (const key of tagsOf(db, 'github:1')) expect(i18n.has(key)).toBe(true);
+  });
+});
+
+describe('migration 3: bildirimin kaynak işi', () => {
+  it('mevcut kayıtları eklentilerin meta alanından doldurur', () => {
+    const db = new DatabaseSync(':memory:');
+    migrate(db, migrations.slice(0, 2));
+    const insert = db.prepare(`INSERT INTO notifications (id, source, title, meta, created_at, received_at)
+      VALUES (?, ?, 'T', ?, 1, 1)`);
+    insert.run('rss:1', 'rss', JSON.stringify({ feedId: 'feed-abcd1234' }));
+    insert.run('steam:1', 'steam', JSON.stringify({ appId: 730 }));
+    insert.run('github:1', 'github', JSON.stringify({ threadId: '9' }));
+    insert.run('diger:1', 'diger', JSON.stringify({ appId: 5 }));
+    insert.run('steam:2', 'steam', '{}');
+
+    migrate(db);
+    const jobs = Object.fromEntries(db.prepare('SELECT id, job FROM notifications').all().map((r) => [r.id, r.job]));
+    expect(jobs).toEqual({
+      'rss:1': 'feed-abcd1234',
+      'steam:1': 'news-730',
+      'github:1': 'notifications',
+      'diger:1': null,
+      'steam:2': null
+    });
   });
 });
 
@@ -105,7 +173,7 @@ describe('sqlite deposu', () => {
     expect(second.kv.get('state')).toEqual({ github: { etag: 'x' } });
     expect(second.notifications.list()).toEqual([{
       id: 'github:1', source: 'github', title: 'T', body: '', url: null, level: 'info',
-      tags: ['a'], createdAt: 10, receivedAt: 11, read: true, meta: { k: 1 }
+      tags: ['a'], createdAt: 10, receivedAt: 11, read: true, meta: { k: 1 }, job: null
     }]);
     second.close();
   });
@@ -145,7 +213,11 @@ describe('pano.json içe aktarma', () => {
     expect(storage.kv.get('app')).toEqual(LEGACY.app);
 
     // Okundu bilgisi ve alınma zamanı korunur; id'siz kayıt atlanır
-    expect(storage.notifications.list()).toEqual([LEGACY.notifications[0], LEGACY.notifications[1]]);
+    // Eski Türkçe etiketler çeviri anahtarına dönüşür
+    expect(storage.notifications.list()).toEqual([
+      { ...LEGACY.notifications[0], tags: ['github:type.Issue'], job: 'notifications' },
+      { ...LEGACY.notifications[1], job: 'notifications' }
+    ]);
 
     expect(fs.existsSync(jsonFile())).toBe(false);
     expect(JSON.parse(fs.readFileSync(`${jsonFile()}.yedek`, 'utf8'))).toEqual(LEGACY);
@@ -216,7 +288,7 @@ describe('pano.json içe aktarma', () => {
     const core = createCore({ dataDir: dir, pluginDirs: [], cipher: plainCipher, logger });
 
     expect(core.notifications.list().map((n) => n.id)).toEqual(['github:2', 'github:1']);
-    expect(core.getAppSettings()).toEqual(LEGACY.app);
+    expect(core.getAppSettings()).toEqual({ ...LEGACY.app, language: 'system' });
     await core.stop();
   });
 });

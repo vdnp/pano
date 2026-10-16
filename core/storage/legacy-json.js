@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { MAX_ITEMS, restoreNotification } from '../notifications.js';
+import { legacyJob, legacyTagsToKeys } from './migrations.js';
 
 const KV_KEYS = ['settings', 'state', 'secrets', 'app'];
 
@@ -29,7 +30,12 @@ export function importLegacyJson(storage, file, logger = console) {
       }
       for (const raw of notifications) {
         if (raw?.id == null || raw.title == null || raw.source == null) continue;
-        storage.notifications.insert(restoreNotification(raw));
+        const item = restoreNotification(raw);
+        storage.notifications.insert({
+          ...item,
+          tags: legacyTagsToKeys(item.source, item.tags),
+          job: item.job ?? legacyJob(item.source, item.meta)
+        });
       }
       storage.notifications.prune(MAX_ITEMS);
     });

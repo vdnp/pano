@@ -3,6 +3,8 @@ import {
 } from 'electron';
 import path from 'node:path';
 import { createCore } from '../../core/index.js';
+import { createI18n, mergeCatalogs, resolveLocale } from '../../shared/i18n.js';
+import { appCatalogs } from '../../locales/index.js';
 
 // package.json build.appId ile aynı olmalı; Windows bildirimleri bu kimliğe bağlıdır
 const APP_ID = 'io.github.vdnp.pano';
@@ -10,6 +12,9 @@ const APP_ID = 'io.github.vdnp.pano';
 let mainWindow = null;
 let core = null;
 let tray = null;
+// Tepsi menüsü ve masaüstü bildirimleri için; uygulama ayarındaki dile göre kurulur
+let i18n = createI18n({ locale: 'tr', catalogs: mergeCatalogs(appCatalogs) });
+let systemLocale = 'en';
 // Kapat düğmesi pencereyi yalnızca gizler; gerçek çıkışta bu bayrak açılır.
 let isQuitting = false;
 
@@ -133,27 +138,37 @@ function registerIpc() {
   const handle = (channel, fn) => ipcMain.handle(channel, (_event, ...args) => fn(...args));
 
   handle('notifications:list', () => core.notifications.list());
-  handle('notifications:markRead', (id) => core.notifications.markRead(String(id)));
-  handle('notifications:markAllRead', (source) => core.notifications.markAllRead(source ? String(source) : undefined));
+  handle('notifications:markRead', (ids) =>
+    core.notifications.markRead(Array.isArray(ids) ? ids.slice(0, 1000).map(String) : String(ids))
+  );
+  handle('notifications:markAllRead', (source, job) =>
+    core.notifications.markAllRead(source ? String(source) : undefined, job ? String(job) : undefined)
+  );
   handle('notifications:clear', (source) => core.notifications.clear(source ? String(source) : undefined));
 
   handle('sources:list', () => core.sources.list());
   handle('sources:runNow', (key) => core.sources.runNow(String(key)));
   handle('sources:updateSettings', (name, values) => core.sources.updateSettings(String(name), values ?? {}));
+  handle('sources:suggest', (name, provider, query) =>
+    core.sources.suggest(String(name), String(provider), String(query ?? ''))
+  );
   handle('sources:setSecret', (name, key, value) =>
     core.sources.setSecret(String(name), String(key), value ? String(value) : '')
   );
 
   handle('app:openExternal', (url) => (isWebUrl(url) ? shell.openExternal(url) : undefined));
 
-  handle('appSettings:get', () => core.getAppSettings());
+  handle('appSettings:get', () => appSettingsPayload());
   handle('appSettings:set', (values) => {
     const input = values && typeof values === 'object' ? values : {};
     const clean = {};
     for (const key of ['openAtLogin', 'pauseNotifications']) {
       if (key in input) clean[key] = Boolean(input[key]);
     }
-    return setAppSettings(clean);
+    // Geçerli değerleri core denetler (system | tr | en)
+    if ('language' in input) clean.language = String(input.language);
+    setAppSettings(clean);
+    return appSettingsPayload();
   });
 }
 
@@ -164,8 +179,9 @@ function forwardEvents() {
   });
   core.bus.on('source:status', () => send('sources:changed'));
   core.bus.on('sources:changed', () => send('sources:changed'));
-  core.bus.on('app:settingsChanged', (settings) => {
-    send('appSettings:changed', settings);
+  core.bus.on('app:settingsChanged', () => {
+    applyLocale();
+    send('appSettings:changed', appSettingsPayload());
     buildTrayMenu();
     updateBadge();
   });
@@ -177,6 +193,18 @@ function applyLoginItem(openAtLogin) {
   const args = process.defaultApp ? [path.resolve(process.argv[1] ?? '.'), '--hidden'] : ['--hidden'];
   app.setLoginItemSettings({ openAtLogin, args });
 }
+
+// "system" seçiliyse işletim sisteminin dil listesinden çözülür; core ve tepsi aynı dili kullanır
+function applyLocale() {
+  const preferred = app.getPreferredSystemLanguages();
+  systemLocale = resolveLocale('system', preferred);
+  const locale = resolveLocale(core.getAppSettings().language, preferred);
+  core.setLocale(locale);
+  i18n = createI18n({ locale, catalogs: mergeCatalogs(appCatalogs) });
+}
+
+// Arayüz çözülmüş dili (locale) ve "Sistem dili (…)" seçeneği için sistem dilini de alır
+const appSettingsPayload = () => ({ ...core.getAppSettings(), locale: i18n.locale, systemLocale });
 
 function setAppSettings(values) {
   const next = core.setAppSettings(values);
@@ -200,16 +228,16 @@ function buildTrayMenu() {
   const { pauseNotifications } = core.getAppSettings();
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Pano'yu aç", click: focusWindow },
-      { label: 'Tümünü şimdi kontrol et', click: runAllSources },
+      { label: i18n.t('tray.open'), click: focusWindow },
+      { label: i18n.t('tray.checkAll'), click: runAllSources },
       {
-        label: 'Bildirimleri duraklat',
+        label: i18n.t('tray.pause'),
         type: 'checkbox',
         checked: pauseNotifications,
         click: (item) => setAppSettings({ pauseNotifications: item.checked })
       },
       { type: 'separator' },
-      { label: "Pano'dan çık", click: quitApp }
+      { label: i18n.t('tray.quit'), click: quitApp }
     ])
   );
 }
@@ -219,13 +247,13 @@ function updateBadge() {
   const count = core.notifications.list().filter((n) => !n.read).length;
   const { pauseNotifications } = core.getAppSettings();
 
-  let tooltip = count ? `Pano: ${count} okunmamış bildirim` : 'Pano';
-  if (pauseNotifications) tooltip += ' (bildirimler duraklatıldı)';
+  let tooltip = count ? i18n.t('tray.tooltipUnread', { count }) : i18n.t('tray.tooltip');
+  if (pauseNotifications) tooltip = i18n.t('tray.tooltipPaused', { tooltip });
   tray?.setToolTip(tooltip);
 
   if (process.platform === 'darwin') tray?.setTitle(count ? String(count) : '');
   if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.setOverlayIcon(count ? overlayFor(count) : null, count ? `${count} okunmamış bildirim` : '');
+    mainWindow.setOverlayIcon(count ? overlayFor(count) : null, count ? i18n.t('tray.overlay', { count }) : '');
   }
 }
 
@@ -261,7 +289,7 @@ function setupDesktopNotifications() {
       batch.forEach((n) => show(n.title, n.body, n.url));
     } else {
       const sources = [...new Set(batch.map((n) => n.source))].join(', ');
-      show(`${batch.length} yeni bildirim`, `Kaynak: ${sources}`, null);
+      show(i18n.t('desktop.batchTitle', { count: batch.length }), i18n.t('desktop.batchBody', { sources }), null);
     }
   }
 
@@ -283,8 +311,11 @@ if (!app.requestSingleInstanceLock()) {
     core = createCore({
       dataDir: app.getPath('userData'),
       pluginDirs: pluginDirs(),
-      cipher
+      cipher,
+      // Dil ayarı core'un deposunda; onu okumadan önceki hatalar sistem dilinde olsun
+      locale: resolveLocale('system', app.getPreferredSystemLanguages())
     });
+    applyLocale();
 
     registerIpc();
     forwardEvents();
