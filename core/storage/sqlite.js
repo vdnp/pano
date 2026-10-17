@@ -39,7 +39,8 @@ const fromRow = (r) => ({
 // file ':memory:' verilirse veritabanı yalnızca bellekte tutulur (testler için).
 export function createSqliteStorage(file = ':memory:') {
   const db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
+  // foreign_keys: bildirim silinince içeriği (contents) de silinsin
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
   migrate(db);
 
   // İç içe çağrılırsa dıştaki transaction'a katılır
@@ -63,6 +64,7 @@ export function createSqliteStorage(file = ':memory:') {
     kvCount: db.prepare('SELECT count(*) AS c FROM kv'),
 
     has: db.prepare('SELECT 1 FROM notifications WHERE id = ?'),
+    get: db.prepare('SELECT * FROM notifications WHERE id = ?'),
     insert: db.prepare(`
       INSERT OR IGNORE INTO notifications
         (id, source, title, body, url, level, tags, created_at, received_at, read, meta, job)
@@ -71,6 +73,24 @@ export function createSqliteStorage(file = ':memory:') {
     // Aynı createdAt'te sonradan eklenen önce gelir
     list: db.prepare('SELECT * FROM notifications ORDER BY created_at DESC, rowid DESC'),
     count: db.prepare('SELECT count(*) AS c FROM notifications'),
+    contentGet: db.prepare('SELECT format, body FROM contents WHERE notification_id = ?'),
+    cacheGet: db.prepare('SELECT value, fetched_at, expires_at FROM provider_cache WHERE key = ?'),
+    cacheTouch: db.prepare('UPDATE provider_cache SET used_at = ? WHERE key = ?'),
+    cacheSet: db.prepare(`INSERT INTO provider_cache (key, value, fetched_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (key) DO UPDATE SET value = excluded.value, fetched_at = excluded.fetched_at,
+        expires_at = excluded.expires_at, used_at = excluded.used_at`),
+    cachePrune: db.prepare(`DELETE FROM provider_cache WHERE key IN (
+      SELECT key FROM provider_cache ORDER BY used_at DESC, rowid DESC LIMIT -1 OFFSET ?)`),
+    contentSet: db.prepare(`INSERT INTO contents (notification_id, format, body) VALUES (?, ?, ?)
+      ON CONFLICT (notification_id) DO UPDATE SET format = excluded.format, body = excluded.body`),
+    historyInsert: db.prepare(`INSERT INTO command_history
+        (run_id, command, plugin, title, params, origin, started_at, duration, status, message, error, error_i18n)
+      VALUES
+        (:run_id, :command, :plugin, :title, :params, :origin, :started_at, :duration, :status, :message, :error, :error_i18n)`),
+    historyList: db.prepare('SELECT * FROM command_history ORDER BY started_at DESC, id DESC LIMIT ?'),
+    historyPrune: db.prepare(`DELETE FROM command_history WHERE id IN (
+      SELECT id FROM command_history ORDER BY started_at DESC, id DESC LIMIT -1 OFFSET ?)`),
+    historyClear: db.prepare('DELETE FROM command_history'),
     markRead: db.prepare('UPDATE notifications SET read = 1 WHERE id = ?'),
     markAllRead: db.prepare('UPDATE notifications SET read = 1'),
     markSourceRead: db.prepare('UPDATE notifications SET read = 1 WHERE source = ?'),
@@ -100,6 +120,10 @@ export function createSqliteStorage(file = ':memory:') {
 
     notifications: {
       has: (id) => Boolean(q.has.get(id)),
+      get: (id) => {
+        const row = q.get.get(id);
+        return row ? fromRow(row) : null;
+      },
       // Kayıt eklendiyse true; aynı id zaten varsa false
       insert: (item) => q.insert.run(toRow(item)).changes > 0,
       list: () => q.list.all().map(fromRow),
@@ -109,6 +133,46 @@ export function createSqliteStorage(file = ':memory:') {
       clear: (source) => (source ? q.clearSource.run(source) : q.clear.run()),
       // En yeni max kaydı tutar, gerisini siler
       prune: (max) => q.prune.run(max)
+    },
+
+    // providers önbelleği: değer JSON metni olarak saklanır
+    providerCache: {
+      get(key, now) {
+        const row = q.cacheGet.get(key);
+        if (!row) return null;
+        q.cacheTouch.run(now, key);
+        return { value: JSON.parse(row.value), fetchedAt: row.fetched_at, expiresAt: row.expires_at };
+      },
+      set: (key, json, fetchedAt, expiresAt) => q.cacheSet.run(key, json, fetchedAt, expiresAt, fetchedAt),
+      // En son kullanılan max kaydı tutar
+      prune: (max) => q.cachePrune.run(max)
+    },
+
+    // Okuyucu paneli için haberin tam metni: { format: 'bbcode' | 'html' | 'text', body }
+    contents: {
+      get: (id) => {
+        const row = q.contentGet.get(id);
+        return row ? { format: row.format, body: row.body } : null;
+      },
+      set: (id, content) => q.contentSet.run(id, content.format, content.body)
+    },
+
+    // Komut geçmişi: { runId, command, plugin, title, params, origin, startedAt, duration, status, message, error, errorI18n }
+    commandHistory: {
+      add(r) {
+        q.historyInsert.run({
+          run_id: r.runId, command: r.command, plugin: r.plugin, title: r.title, params: JSON.stringify(r.params ?? {}),
+          origin: r.origin, started_at: r.startedAt, duration: r.duration, status: r.status,
+          message: r.message ?? null, error: r.error ?? null, error_i18n: r.errorI18n ? JSON.stringify(r.errorI18n) : null
+        });
+      },
+      list: (limit) => q.historyList.all(limit).map((r) => ({
+        id: r.id, runId: r.run_id, command: r.command, plugin: r.plugin, title: r.title, params: JSON.parse(r.params),
+        origin: r.origin, startedAt: r.started_at, duration: r.duration, status: r.status,
+        message: r.message, error: r.error, errorI18n: r.error_i18n ? JSON.parse(r.error_i18n) : null
+      })),
+      prune: (max) => q.historyPrune.run(max),
+      clear: () => q.historyClear.run()
     },
 
     isEmpty: () => q.kvCount.get().c === 0 && q.count.get().c === 0,

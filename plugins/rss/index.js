@@ -5,11 +5,39 @@ const MAX_SEEN = 1000;
 
 const asArray = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]);
 
-// Düğüm metnini düz metne çevirir: CDATA/HTML etiketleri ve fazla boşluk atılır
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+// Bazı akışlar (ör. The Verge) başlıkları çift kaçışlar: XML ayrıştırıcı ilk katmanı
+// çözer, "&#8217;" gibi ikinci katman metinde kalır.
+function decodeEntities(value) {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity) => {
+    if (entity[0] !== '#') return ENTITIES[entity.toLowerCase()] ?? match;
+    const code = entity[1].toLowerCase() === 'x' ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+    return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : match;
+  });
+}
+
+// Düğüm metnini düz metne çevirir: CDATA/HTML etiketleri, kaçışlar ve fazla boşluk atılır
 function text(v) {
   if (v == null) return '';
   if (typeof v === 'object') return text(v['#text']);
-  return String(v).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  return decodeEntities(String(v).replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
+}
+
+// Düğümün ham metni (HTML etiketleriyle birlikte); okuyucu paneline gider
+function raw(v) {
+  if (v == null) return '';
+  if (typeof v === 'object') return typeof v['#text'] === 'string' ? v['#text'] : '';
+  return String(v);
+}
+
+// Bildirim satırındaki iki satırlık özet: en fazla 200 karakter, kelime ortasında kesilmez
+export function excerpt(value, max = 200) {
+  if (value.length <= max) return value;
+  let cut = value.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  if (space > max * 0.6) cut = cut.slice(0, space);
+  return `${cut.replace(/[\s.,;:!?-]+$/, '')}…`;
 }
 
 function parseDate(value) {
@@ -62,8 +90,16 @@ function rssEntry(item, untitled) {
     id: text(item.guid) || link,
     title: text(item.title) || untitled,
     link,
-    date: parseDate(text(item.pubDate) || text(item.date))
+    date: parseDate(text(item.pubDate) || text(item.date)),
+    // content:encoded (ad alanı atılınca "encoded") tam metin, yoksa description
+    content: { format: 'html', body: raw(item.encoded ?? item.description) }
   };
+}
+
+// Atom içeriği type="text" ise düz metin, "html" (ya da belirtilmemişse) HTML. type="xhtml"
+// içerik XML olarak ayrıştırıldığı için ham hali yoktur; boş kalır, okuyucu özeti gösterir.
+function atomContent(node) {
+  return { format: node?.['@_type'] === 'text' ? 'text' : 'html', body: raw(node) };
 }
 
 function atomEntry(entry, untitled) {
@@ -72,7 +108,8 @@ function atomEntry(entry, untitled) {
     id: text(entry.id) || link,
     title: text(entry.title) || untitled,
     link,
-    date: parseDate(text(entry.updated) || text(entry.published))
+    date: parseDate(text(entry.updated) || text(entry.published)),
+    content: atomContent(entry.content ?? entry.summary)
   };
 }
 
@@ -162,7 +199,8 @@ async function checkFeed(ctx, feed) {
       url: entry.link,
       tags: [ctx.key('tag.announcement')],
       createdAt: entry.date ?? undefined,
-      meta: { feedId: feed.id, feedUrl: feed.url }
+      meta: { feedId: feed.id, feedUrl: feed.url, excerpt: excerpt(text(entry.content.body)) },
+      content: entry.content
     });
     if (isNew) added++;
   }

@@ -5,21 +5,78 @@
     "rateLimited": "Steam's request limit was reached. It will be retried on the next check.",
     "http": "Steam returned an unexpected response ({status}). It will be retried on the next check.",
     "badJson": "Could not read Steam's response. It will be retried on the next check.",
-    "noNews": "Steam returned no news for this game (App ID {appId}). Check the game in the settings."
+    "noNews": "Steam returned no news for this game (App ID {appId}). Check the game in the settings.",
+    "noApiKey": "No Steam Web API key has been entered. Add the key in the settings.",
+    "invalidApiKey": "The Steam API key is invalid or has been revoked. Check the key at steamcommunity.com/dev/apikey and enter it again in the settings.",
+    "steamIdMissing": "The Steam account was not recognized. Enter your SteamID (starting with 7656119…) or profile URL in the settings.",
+    "steamIdNotFound": "This Steam account could not be found. Check the SteamID or profile URL in the settings.",
+    "privateProfile": "Your Steam profile's game details are private. In Steam, go to Profile → Privacy Settings and set \"Game details\" to \"Public\".",
+    "noAchievements": "This game has no Steam achievements. You can remove it from the achievement cards list in the settings.",
+    "friendsPrivate": "Your friends list is private, so friends could not be loaded. Make \"Friends list\" public in Steam privacy settings or add the SteamID manually.",
+    "badAppId": "Invalid App ID. Search the game by name and pick it from the list."
   },
   "tag": {
     "announcement": "Announcement",
     "patchNotes": "Patch notes",
     "hotfix": "Hotfix",
-    "update": "Update"
+    "update": "Update",
+    "friendOnline": "Online",
+    "friendPlaying": "In game"
   },
   "unknownApp": "Steam app {appId}",
   "untitled": "(untitled)",
   "suggest": {
     "detail": "App ID {appId}"
   },
+  "apiLanguage": "english",
+  "widgets": {
+    "profile": "Steam profile",
+    "recent": "Recently played",
+    "library": "Library summary",
+    "topPlayed": "Most played",
+    "achievementsFor": "Achievements · {game}"
+  },
+  "profile": {
+    "playing": "Playing: {game}",
+    "state": {
+      "offline": "Offline",
+      "online": "Online",
+      "busy": "Busy",
+      "away": "Away",
+      "snooze": "Snooze"
+    },
+    "lastSeen": "Last seen",
+    "date": "{at, date}",
+    "memberSince": "Member since",
+    "visibility": "Profile",
+    "private": "Private"
+  },
+  "recent": {
+    "total": "{hours, number} h total",
+    "twoWeeks": "{hours, number} h in 2 weeks"
+  },
+  "library": {
+    "games": "Games",
+    "hours": "Total playtime",
+    "hoursUnit": "h",
+    "played": "Played",
+    "percent": "{value}%"
+  },
+  "top": {
+    "hours": "{hours, number} hours"
+  },
+  "achievements": {
+    "total": "Total",
+    "unlocked": "{at, date}"
+  },
+  "friends": {
+    "title": "Friends",
+    "detail": "SteamID {id}",
+    "online": "{name} is now online",
+    "playing": "{name} started playing {game}"
+  },
   "manifest": {
-    "description": "Notifies you about Steam news and patch notes for the games you follow.",
+    "description": "Notifies you about Steam news for the games you follow and shows your profile, library and achievements on the dashboard.",
     "setup": {
       "title": "No games added yet",
       "body": "Search for the games whose news you want to follow by name in the settings and add them. New news show up here as notifications; when you add a game only its latest 3 news arrive.",
@@ -30,15 +87,89 @@
         "label": "Games",
         "addLabel": "Add manually",
         "help": "Search for a game by name and pick it from the results. If you know the App ID, you can also enter it with \"Add manually\".",
-        "suggest": { "placeholder": "Search games by name" },
+        "suggest": {
+          "placeholder": "Search games by name"
+        },
         "item": {
-          "appId": { "label": "App ID" },
-          "name": { "label": "Game", "placeholder": "Optional" }
+          "appId": {
+            "label": "App ID"
+          },
+          "name": {
+            "label": "Game",
+            "placeholder": "Optional"
+          }
         }
       },
-      "officialOnly": { "label": "Official announcements only (hide press news)" },
-      "patchNotesOnly": { "label": "Patch notes only (Steam's patch notes tag or \"patch notes\" in the title)" },
-      "interval": { "label": "Check interval (minutes)" }
+      "officialOnly": {
+        "label": "Official announcements only (hide press news)"
+      },
+      "patchNotesOnly": {
+        "label": "Patch notes only (Steam's patch notes tag or \"patch notes\" in the title)"
+      },
+      "interval": {
+        "label": "Check interval (minutes)"
+      },
+      "steamId": {
+        "label": "Steam account",
+        "placeholder": "SteamID64 or profile URL",
+        "help": "For the profile cards, enter your SteamID starting with 7656119… or your profile URL (steamcommunity.com/id/… or /profiles/…). The cards also need an API key."
+      },
+      "achievementGames": {
+        "label": "Achievement cards",
+        "addLabel": "Add manually",
+        "help": "Search for and add the games whose achievement progress you want on the dashboard; each game gets its own card.",
+        "suggest": {
+          "placeholder": "Search games by name"
+        },
+        "item": {
+          "appId": {
+            "label": "App ID"
+          },
+          "name": {
+            "label": "Game",
+            "placeholder": "Optional"
+          }
+        }
+      },
+      "friendsOnline": {
+        "label": "Notify when selected friends come online or start a game"
+      },
+      "friends": {
+        "label": "Followed friends",
+        "addLabel": "Add manually",
+        "help": "Your friends list must be public. Search for a friend by name or add their SteamID64 manually.",
+        "suggest": {
+          "placeholder": "Search friends by name"
+        },
+        "item": {
+          "steamId": {
+            "label": "SteamID64"
+          },
+          "name": {
+            "label": "Name",
+            "placeholder": "Optional"
+          }
+        }
+      },
+      "friendsInterval": {
+        "label": "Friends check interval (minutes)"
+      }
+    },
+    "secrets": {
+      "apiKey": {
+        "label": "Steam Web API key",
+        "help": "Required for the profile, library and achievement cards and for friend notifications. Sign in with your Steam account and get a free key, entering e.g. \"localhost\" as the domain name. The key is stored encrypted on this computer only."
+      }
+    }
+  },
+  "commands": {
+    "launchGame": {
+      "title": "Launch game",
+      "description": "Launches the game in the Steam client.",
+      "appId": "Game",
+      "placeholder": "Search by game name or type an App ID",
+      "name": "Game name",
+      "done": "Launching in Steam: {game}"
     }
   }
 }

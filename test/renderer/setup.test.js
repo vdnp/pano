@@ -58,6 +58,11 @@ describe('setupNeed', () => {
     }))).toEqual({ name: 'demo', title: 'Demo başlatılamadı', body: 'Eklenti başlatılamadı: x.', action: null });
   });
 
+  it('yalnızca kart sunan eklenti kurulum beklemez', () => {
+    expect(setupNeed(source({ jobs: [], kinds: { sources: false, widgets: true } }))).toBeNull();
+    expect(setupNeed(source({ jobs: [], kinds: { sources: true, widgets: true } }))).not.toBeNull();
+  });
+
   it('gizli alanları dolu ve kaynağı olan eklenti kurulum beklemez', () => {
     expect(setupNeed(source({ secretsSchema: { token: {} }, secretsSet: { token: true } }))).toBeNull();
   });

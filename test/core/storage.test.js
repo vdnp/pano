@@ -21,8 +21,8 @@ describe('migrations', () => {
     expect(migrate(db)).toEqual({ from: 0, to: migrations.length });
     expect(version(db)).toBe(migrations.length);
     expect(tables(db)).toEqual([
-      'kv', 'notifications', 'notifications_created_at', 'notifications_read', 'notifications_source',
-      'notifications_source_job', 'schema_version'
+      'command_history', 'command_history_started_at', 'contents', 'kv', 'notifications', 'notifications_created_at', 'notifications_read', 'notifications_source',
+      'notifications_source_job', 'provider_cache', 'provider_cache_used_at', 'schema_version'
     ]);
   });
 
@@ -129,6 +129,55 @@ describe('migration 3: bildirimin kaynak işi', () => {
       'diger:1': null,
       'steam:2': null
     });
+  });
+});
+
+describe('migration 4: Steam haberlerinin yeniden sınıflanması', () => {
+  it('başlık kurallarını uygular, Steam etiketli yama notlarını ve diğer kaynakları korur', () => {
+    const db = new DatabaseSync(':memory:');
+    migrate(db, migrations.slice(0, 3));
+    const insert = db.prepare(`INSERT INTO notifications (id, source, title, tags, created_at, received_at)
+      VALUES (?, ?, ?, ?, 1, 1)`);
+    const rows = [
+      ['s1', 'steam', 'PATCH NOTES: Y11S3 MID-SEASON UPDATE', ['steam:tag.announcement']],
+      ['s2', 'steam', 'Hotfix 1.2', ['steam:tag.announcement']],
+      ['s3', 'steam', 'Spring Update', ['steam:tag.announcement']],
+      ['s4', 'steam', 'Counter-Strike 2 Update', ['steam:tag.patchNotes']], // Steam etiketli
+      ['s5', 'steam', "Doktor's Curse Is Back", ['steam:tag.announcement']],
+      ['s6', 'steam', 'Eski biçim', ['Duyuru']], // anahtar değil, dokunulmaz
+      ['r1', 'rss', 'Big update', ['rss:tag.announcement']]
+    ];
+    for (const [id, source, title, tags] of rows) insert.run(id, source, title, JSON.stringify(tags));
+
+    migrate(db);
+    const tags = Object.fromEntries(db.prepare('SELECT id, tags FROM notifications').all().map((r) => [r.id, JSON.parse(r.tags)]));
+    expect(tags).toEqual({
+      s1: ['steam:tag.patchNotes'],
+      s2: ['steam:tag.hotfix'],
+      s3: ['steam:tag.update'],
+      s4: ['steam:tag.patchNotes'],
+      s5: ['steam:tag.announcement'],
+      s6: ['Duyuru'],
+      r1: ['rss:tag.announcement']
+    });
+  });
+});
+
+describe('migration 6: Steam için sayfadan çıkarılmış çöp içerik', () => {
+  it('yalnızca Steam bildirimlerinin Readability içeriklerini siler', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA foreign_keys = ON');
+    migrate(db, migrations.slice(0, 5));
+    const note = db.prepare(`INSERT INTO notifications (id, source, title, created_at, received_at) VALUES (?, ?, 'T', 1, 1)`);
+    const content = db.prepare('INSERT INTO contents (notification_id, format, body) VALUES (?, ?, ?)');
+    const footer = '<div id="readability-page-1" class="page"><p>© Valve Corporation. Tüm hakları saklıdır.</p></div>';
+    note.run('steam:1', 'steam'); content.run('steam:1', 'html', footer);
+    note.run('steam:2', 'steam'); content.run('steam:2', 'bbcode', '[p]API metni[/p]');
+    note.run('rss:1', 'rss'); content.run('rss:1', 'html', '<div id="readability-page-1"><p>RSS makalesi</p></div>');
+
+    migrate(db);
+    const left = db.prepare('SELECT notification_id FROM contents ORDER BY notification_id').all().map((r) => r.notification_id);
+    expect(left).toEqual(['rss:1', 'steam:2']);
   });
 });
 

@@ -27,7 +27,8 @@ export function setupNeed(source, i18n) {
     };
   }
 
-  if (source.jobs.length === 0) {
+  // Hiç bildirim kaynağı sunmayan (yalnızca kart veren) eklenti kurulum beklemez
+  if (source.jobs.length === 0 && source.kinds?.sources !== false) {
     return {
       name: source.name,
       title: pluginText(i18n, source, 'setup.title', source.setup?.title ?? t('setup.noSourcesTitle', { name })),

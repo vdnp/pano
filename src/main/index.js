@@ -1,10 +1,12 @@
 import {
-  app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, powerMonitor, safeStorage, shell, Tray
+  app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, Notification, powerMonitor, safeStorage, session, shell, Tray
 } from 'electron';
 import path from 'node:path';
 import { createCore } from '../../core/index.js';
+import { isPrivateHost } from '../../core/web.js';
 import { createI18n, mergeCatalogs, resolveLocale } from '../../shared/i18n.js';
 import { appCatalogs } from '../../locales/index.js';
+import { isPluginOpenable, isWebUrl } from './urls.js';
 
 // package.json build.appId ile aynı olmalı; Windows bildirimleri bu kimliğe bağlıdır
 const APP_ID = 'io.github.vdnp.pano';
@@ -23,13 +25,9 @@ const startHidden =
   process.argv.includes('--hidden') ||
   (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin);
 
-const isWebUrl = (url) => {
-  try {
-    return ['https:', 'http:'].includes(new URL(url).protocol);
-  } catch {
-    return false;
-  }
-};
+// Komut paletinin genel kısayolu: pencere gizliyken de çalışır. Ctrl+K sistem genelinde
+// tarayıcı ve editörlerin kısayolunu çalacağı için seçilmedi (Ctrl+K yalnızca pencere içinde).
+const PALETTE_SHORTCUT = 'CommandOrControl+Shift+Space';
 
 // Electron'un safeStorage'ı ile token'lar işletim sisteminin anahtar
 // zincirinde (Windows DPAPI, macOS Keychain, Linux libsecret) şifrelenir.
@@ -47,6 +45,24 @@ const cipher = {
     return null;
   }
 };
+
+// Okuyucunun sayfa/görsel indirmesi kullanıcının oturumundan ayrı, bellekte tutulan bir oturumla
+// ve Chromium ağ yığınıyla yapılır (Cloudflare gibi korumalar Node fetch'ini bot sayıp 403 döner).
+// İstek filtresi her adımı, yönlendirmeler dahil, denetler: yalnızca http(s), yerel ağ yok.
+function createReaderFetch() {
+  const reader = session.fromPartition('pano-reader');
+  reader.webRequest.onBeforeRequest((details, callback) => {
+    let allowed = false;
+    try {
+      const url = new URL(details.url);
+      allowed = (url.protocol === 'https:' || url.protocol === 'http:') && !isPrivateHost(url.hostname);
+    } catch {
+      allowed = false;
+    }
+    callback({ cancel: !allowed });
+  });
+  return (url, options) => reader.fetch(url, { ...options, credentials: 'omit' });
+}
 
 function pluginDirs() {
   const builtin = app.isPackaged
@@ -79,6 +95,18 @@ function focusWindow() {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+}
+
+// Pencere gizliyse ya da hiç açılmadıysa önce gösterilir; arayüz yüklenince palet açılır
+function openPalette() {
+  if (!mainWindow) {
+    createWindow();
+    mainWindow.webContents.once('did-finish-load', () => send('palette:open'));
+    return;
+  }
+  focusWindow();
+  if (mainWindow.webContents.isLoading()) mainWindow.webContents.once('did-finish-load', () => send('palette:open'));
+  else send('palette:open');
 }
 
 function createWindow() {
@@ -138,6 +166,28 @@ function registerIpc() {
   const handle = (channel, fn) => ipcMain.handle(channel, (_event, ...args) => fn(...args));
 
   handle('notifications:list', () => core.notifications.list());
+  handle('notifications:content', (id) => core.notifications.content(String(id)));
+  handle('notifications:fetchContent', (id) => core.notifications.fetchContent(String(id)));
+  handle('notifications:setContent', (id, content) =>
+    core.notifications.setContent(String(id), {
+      format: String(content?.format ?? ''),
+      body: String(content?.body ?? '')
+    })
+  );
+  // Okuyucu: adres denetimi (http(s), yerel ağ yok), süre ve boyut sınırları core/web.js'te
+  handle('web:page', (url) => core.web.page(String(url)));
+  // Panel: kart tanımları, kart verisi (sağlayıcı + map + şema temizleme core'da) ve düzen
+  handle('widgets:list', () => core.widgets.list());
+  handle('widgets:data', (id, options) => core.widgets.data(String(id), { force: Boolean(options?.force) }));
+  handle('dashboard:get', () => core.dashboard.get());
+  handle('dashboard:set', (layout) =>
+    core.dashboard.set({
+      cards: (Array.isArray(layout?.cards) ? layout.cards : [])
+        .slice(0, 200)
+        .map((c) => ({ id: String(c?.id ?? ''), visible: Boolean(c?.visible) }))
+    })
+  );
+  handle('web:image', (url) => core.web.image(String(url)));
   handle('notifications:markRead', (ids) =>
     core.notifications.markRead(Array.isArray(ids) ? ids.slice(0, 1000).map(String) : String(ids))
   );
@@ -157,6 +207,21 @@ function registerIpc() {
   );
 
   handle('app:openExternal', (url) => (isWebUrl(url) ? shell.openExternal(url) : undefined));
+
+  // Komutlar: çalıştırma kimliği hemen döner; ilerleme ve sonuç olaylarla gelir
+  const params = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  handle('commands:list', () => core.commands.list());
+  handle('commands:run', (id, values, origin) =>
+    core.commands.run(String(id), params(values), origin === 'history' ? 'history' : 'palette')
+  );
+  handle('commands:cancel', (runId) => core.commands.cancel(String(runId)));
+  handle('commands:running', () => core.commands.running());
+  handle('commands:history', () => core.commands.history());
+  handle('commands:clearHistory', () => core.commands.clearHistory());
+  handle('commands:suggest', (id, key, query) => core.commands.suggest(String(id), String(key), String(query ?? '')));
+  handle('commands:runForNotification', (id, notificationId) =>
+    core.commands.runForNotification(String(id), String(notificationId))
+  );
 
   handle('appSettings:get', () => appSettingsPayload());
   handle('appSettings:set', (values) => {
@@ -179,6 +244,9 @@ function forwardEvents() {
   });
   core.bus.on('source:status', () => send('sources:changed'));
   core.bus.on('sources:changed', () => send('sources:changed'));
+  core.bus.on('command:started', (info) => send('commands:started', info));
+  core.bus.on('command:progress', (info) => send('commands:progress', info));
+  core.bus.on('command:finished', (info) => send('commands:finished', info));
   core.bus.on('app:settingsChanged', () => {
     applyLocale();
     send('appSettings:changed', appSettingsPayload());
@@ -212,10 +280,9 @@ function setAppSettings(values) {
   return next;
 }
 
+// Komut olarak çalışır: ilerlemesi arayüzde görünür ve geçmişe "Tepsi" kaynağıyla yazılır
 function runAllSources() {
-  for (const source of core.sources.list()) {
-    for (const job of source.jobs) core.sources.runNow(job.key);
-  }
+  core.commands.run('pano/runAll', {}, 'tray');
 }
 
 function quitApp() {
@@ -229,6 +296,7 @@ function buildTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: i18n.t('tray.open'), click: focusWindow },
+      { label: i18n.t('tray.palette'), accelerator: PALETTE_SHORTCUT, click: openPalette },
       { label: i18n.t('tray.checkAll'), click: runAllSources },
       {
         label: i18n.t('tray.pause'),
@@ -313,7 +381,17 @@ if (!app.requestSingleInstanceLock()) {
       pluginDirs: pluginDirs(),
       cipher,
       // Dil ayarı core'un deposunda; onu okumadan önceki hatalar sistem dilinde olsun
-      locale: resolveLocale('system', app.getPreferredSystemLanguages())
+      locale: resolveLocale('system', app.getPreferredSystemLanguages()),
+      // Okuyucunun sayfa indirmesi uygulamanın gerçek kimliğiyle (Chromium + pano + Electron)
+      userAgent: app.userAgentFallback,
+      fetchImpl: createReaderFetch(),
+      fetchFollowsRedirects: true,
+      // Eklentinin ctx.openExternal'ı: http(s) ve yalnızca steam://rungameid/<id>
+      openExternal: async (url) => {
+        if (!isPluginOpenable(url)) return false;
+        await shell.openExternal(url);
+        return true;
+      }
     });
     applyLocale();
 
@@ -321,6 +399,10 @@ if (!app.requestSingleInstanceLock()) {
     forwardEvents();
     setupDesktopNotifications();
     createTray();
+    // Başka bir uygulama kısayolu almışsa Pano yine çalışır; palet tepsiden ve Ctrl+K ile açılır
+    if (!globalShortcut.register(PALETTE_SHORTCUT, openPalette)) {
+      console.warn(`Genel kısayol kaydedilemedi: ${PALETTE_SHORTCUT}`);
+    }
     // Kurulum yolu değişmiş olabilir; kaydı yeniden yaz. Dev'de dokunma ki
     // kurulu sürümün kaydı electron.exe ile ezilmesin.
     if (app.isPackaged) applyLoginItem(core.getAppSettings().openAtLogin);
@@ -339,4 +421,6 @@ if (!app.requestSingleInstanceLock()) {
     isQuitting = true;
     core?.stop();
   });
+
+  app.on('will-quit', () => globalShortcut.unregisterAll());
 }

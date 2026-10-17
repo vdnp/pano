@@ -5,17 +5,84 @@
     "rateLimited": "Steam istek sınırına ulaşıldı. Bir sonraki kontrolde tekrar denenecek.",
     "http": "Steam beklenmeyen bir yanıt verdi ({status}). Bir sonraki kontrolde tekrar denenecek.",
     "badJson": "Steam'den gelen yanıt okunamadı. Bir sonraki kontrolde tekrar denenecek.",
-    "noNews": "Steam bu oyun için haber vermedi (App ID {appId}). Ayarlardan oyunu kontrol et."
+    "noNews": "Steam bu oyun için haber vermedi (App ID {appId}). Ayarlardan oyunu kontrol et.",
+    "noApiKey": "Steam Web API anahtarı girilmemiş. Ayarlar'dan anahtarı ekle.",
+    "invalidApiKey": "Steam API anahtarı geçersiz ya da iptal edilmiş. steamcommunity.com/dev/apikey sayfasından anahtarı kontrol edip Ayarlar'da yeniden gir.",
+    "steamIdMissing": "Steam hesabı tanınmadı. Ayarlar'a 7656119… ile başlayan SteamID'ni ya da profil adresini yaz.",
+    "steamIdNotFound": "Bu Steam hesabı bulunamadı. Ayarlar'daki SteamID ya da profil adresini kontrol et.",
+    "privateProfile": "Steam profilinin oyun ayrıntıları gizli. Steam'de Profil → Gizlilik Ayarları'ndan \"Oyun ayrıntıları\"nı \"Herkese açık\" yap.",
+    "noAchievements": "Bu oyunun Steam başarımı yok. Ayarlar'daki başarım kartları listesinden kaldırabilirsin.",
+    "friendsPrivate": "Arkadaş listen gizli olduğu için arkadaşlar getirilemedi. Steam gizlilik ayarlarından \"Arkadaş listesi\"ni herkese açık yap ya da SteamID'yi elle ekle.",
+    "badAppId": "Geçersiz App ID. Oyunu adıyla arayıp listeden seç."
   },
   "tag": {
     "announcement": "Duyuru",
     "patchNotes": "Yama notu",
     "hotfix": "Hotfix",
-    "update": "Güncelleme"
+    "update": "Güncelleme",
+    "friendOnline": "Çevrimiçi",
+    "friendPlaying": "Oyunda"
   },
   "unknownApp": "Steam uygulaması {appId}",
   "untitled": "(başlıksız)",
   "suggest": {
     "detail": "App ID {appId}"
+  },
+  "apiLanguage": "turkish",
+  "widgets": {
+    "profile": "Steam profili",
+    "recent": "Son oynananlar",
+    "library": "Kütüphane özeti",
+    "topPlayed": "En çok oynananlar",
+    "achievementsFor": "Başarımlar · {game}"
+  },
+  "profile": {
+    "playing": "Oynuyor: {game}",
+    "state": {
+      "offline": "Çevrimdışı",
+      "online": "Çevrimiçi",
+      "busy": "Meşgul",
+      "away": "Uzakta",
+      "snooze": "Uykuda"
+    },
+    "lastSeen": "Son görülme",
+    "date": "{at, date}",
+    "memberSince": "Üyelik",
+    "visibility": "Profil",
+    "private": "Gizli"
+  },
+  "recent": {
+    "total": "Toplam {hours, number} sa",
+    "twoWeeks": "2 haftada {hours, number} sa"
+  },
+  "library": {
+    "games": "Oyun",
+    "hours": "Toplam süre",
+    "hoursUnit": "sa",
+    "played": "Oynanan",
+    "percent": "%{value}"
+  },
+  "top": {
+    "hours": "{hours, number} saat"
+  },
+  "achievements": {
+    "total": "Toplam",
+    "unlocked": "{at, date}"
+  },
+  "friends": {
+    "title": "Arkadaşlar",
+    "detail": "SteamID {id}",
+    "online": "{name} çevrimiçi oldu",
+    "playing": "{name} {game} oynamaya başladı"
+  },
+  "commands": {
+    "launchGame": {
+      "title": "Oyunu başlat",
+      "description": "Steam istemcisinde oyunu başlatır.",
+      "appId": "Oyun",
+      "placeholder": "Oyun adıyla ara ya da App ID yaz",
+      "name": "Oyun adı",
+      "done": "Steam'de başlatılıyor: {game}"
+    }
   }
 }

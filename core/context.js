@@ -1,9 +1,24 @@
 import { parseXml } from './xml.js';
 
-// Eklentiye Node'un tamamı yerine bu sınırlı API verilir.
-// Yeni yetenekler (dosya sistemi, komut çağırma vb.) ileride buraya eklenecek.
-export function createContext(pluginName, { notifications, store, secrets, getSettings, getI18n, logger }) {
+// İzin gerektiren yetenekler: manifest.permissions'ta beyan edilmeli
+export const PERMISSIONS = ['openExternal', 'runCommand'];
+
+// Eklentiye Node'un tamamı yerine bu sınırlı API verilir. İzin gerektiren yetenekler
+// (openExternal, runCommand) yalnızca bir komut çalışırken kullanılabilir: arka planda
+// periyodik çalışan kaynak işi kullanıcının haberi olmadan tarayıcı açamaz.
+// capabilities: core'un verdiği gerçek uygulamalar { openExternal(url), runCommand(id, params, opts) }
+export function createContext(pluginName, {
+  notifications, store, secrets, getSettings, getI18n, logger, permissions = [], capabilities = {}
+}) {
   const prefix = `[${pluginName}]`;
+  const granted = new Set(permissions);
+
+  // İzin beyan edilmemişse ya da komut dışında çağrıldıysa anlaşılır hata
+  function check(permission, command) {
+    const name = { key: `core.permissions.names.${permission}` };
+    if (!granted.has(permission)) throw getI18n().error('core.permissions.denied', { plugin: pluginName, permission: name });
+    if (!command) throw getI18n().error('core.permissions.notInCommand', { permission: name });
+  }
   // Eklentinin kendi anahtarları adıyla öneklenir: key('errors.x') → 'rss:errors.x'
   const key = (k) => `${pluginName}:${k}`;
 
@@ -25,6 +40,28 @@ export function createContext(pluginName, { notifications, store, secrets, getSe
     // Bir kaynak işi çalışırken eklentiye bu kopya verilir; aynı anda çalışan
     // işlerin bildirimleri birbirine karışmaz.
     forJob: (job) => ({ ...ctx, notify: (n) => notifyFor(n, job) }),
+
+    // Komut çalışırken verilen kopya: iptal sinyali ve izinli yetenekler. depth iç içe
+    // runCommand zincirinin uzunluğu (döngüyü core sınırlar).
+    forCommand: ({ signal, depth = 0 }) => ({
+      ...ctx,
+      signal,
+      async openExternal(url) {
+        check('openExternal', true);
+        return capabilities.openExternal(String(url ?? ''));
+      },
+      async runCommand(id, params = {}) {
+        check('runCommand', true);
+        return capabilities.runCommand(String(id ?? ''), params, { depth: depth + 1, signal, caller: pluginName });
+      }
+    }),
+
+    async openExternal() {
+      check('openExternal', false);
+    },
+    async runCommand() {
+      check('runCommand', false);
+    },
 
     fetch(url, options = {}) {
       return fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(20_000) });

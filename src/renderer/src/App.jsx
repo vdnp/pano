@@ -5,6 +5,13 @@ import Feed from './components/Feed.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
 import { setupNeed } from './lib/setup.js';
 import AppSettingsPanel from './components/AppSettingsPanel.jsx';
+import ReaderPanel from './components/ReaderPanel.jsx';
+import Dashboard from './components/Dashboard.jsx';
+import CommandPalette from './components/CommandPalette.jsx';
+import RunToasts from './components/RunToasts.jsx';
+import HistoryView from './components/HistoryView.jsx';
+import { useCommands } from './lib/useCommands.js';
+import { needsInput } from './lib/commands.js';
 import { I18nProvider, useI18n } from './lib/i18n.jsx';
 import { pluginName } from './lib/plugin-text.js';
 import {
@@ -35,11 +42,53 @@ function Shell({ notifications, sources, appSettings, ready }) {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [settingsFor, setSettingsFor] = useState(null);
   const [appSettingsOpen, setAppSettingsOpen] = useState(false);
+  const [readingId, setReadingId] = useState(null);
+  // Komut paleti: null kapalı; { request } geçmişten tekrar çalıştırmada doğrudan parametre adımı
+  const [palette, setPalette] = useState(null);
+  const { commands, runs, dismiss, report } = useCommands();
+  // Ana alan: "panel" (kartlar), "notifications" (akış) ya da "history" (komut geçmişi);
+  // son seçim bu bilgisayarda hatırlanır
+  const [view, setViewState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pano.view');
+      return ['notifications', 'history'].includes(saved) ? saved : 'panel';
+    } catch {
+      return 'panel';
+    }
+  });
+  const setView = (next) => {
+    setViewState(next);
+    try {
+      localStorage.setItem('pano.view', next);
+    } catch {
+      /* saklanamazsa yalnızca bu oturumda geçerli */
+    }
+  };
+
+  // Ctrl+K (macOS: Cmd+K) pencere içinde; genel kısayol ve tepsi menüsü main'den palette:open ile
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPalette((p) => p ?? {});
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    const off = api.on('palette:open', () => setPalette((p) => p ?? {}));
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      off();
+    };
+  }, []);
 
   // Seçili oyun/akış ayarlardan silinmişse bir üst seviyeye düşülür
   const resolved = resolveSelection(rawSelection, sources);
   // Oyun/akış değişince tür seçimi sıfırlanır
-  const select = (source, job = null) => setSelection({ source, job, tag: null });
+  // Bir kaynak ya da "Bildirimler" seçilince akış görünümüne geçilir
+  const select = (source, job = null) => {
+    setSelection({ source, job, tag: null });
+    setView('notifications');
+  };
 
   // Seçili kapsamdaki (eklenti/oyun) bildirimlerin türleri; en az iki tür varsa çip olarak gösterilir
   const scope = useMemo(
@@ -61,6 +110,32 @@ function Shell({ notifications, sources, appSettings, ready }) {
     [sources, i18n]
   );
 
+  // Arayüzün kendi işleri de paletten açılır (geçmişe yazılmaz): görünümler ve ayarlar
+  const uiCommands = useMemo(() => [
+    { id: 'ui:panel', text: i18n.t('palette.ui.panel'), run: () => setView('panel') },
+    { id: 'ui:notifications', text: i18n.t('palette.ui.notifications'), run: () => select(null) },
+    { id: 'ui:history', text: i18n.t('palette.ui.history'), run: () => setView('history') },
+    { id: 'ui:appSettings', text: i18n.t('palette.ui.appSettings'), run: () => setAppSettingsOpen(true) },
+    ...sources.map((s) => ({
+      id: `ui:settings:${s.name}`,
+      text: i18n.t('palette.ui.openSettings', { name: sourceNames[s.name] }),
+      run: () => setSettingsFor(s.name)
+    }))
+  ], [sources, sourceNames, i18n]);
+
+  // Geçmişten tekrar: gizli ya da eksik parametre varsa palet sorar, yoksa doğrudan çalışır
+  const rerun = (command, params) => {
+    if (needsInput(command, params)) setPalette({ request: { command, prefill: params, origin: 'history' } });
+    else api.commands.run(command.id, params, 'history').catch((err) => report(command, err));
+  };
+
+  // Bildirim satırındaki eylemler: komutun eklentisinin bildirimlerinde gösterilir
+  const notificationActions = useMemo(() => {
+    const out = {};
+    for (const c of commands) if (c.notificationAction) (out[c.plugin] ??= []).push(c);
+    return out;
+  }, [commands]);
+
   const activeSource = sources.find((s) => s.name === selection.source);
   const jobs = jobsOf(activeSource);
   const activeJob = jobs.find((j) => j.id === selection.job);
@@ -81,6 +156,7 @@ function Shell({ notifications, sources, appSettings, ready }) {
     : [];
 
   const settingsSource = sources.find((s) => s.name === settingsFor);
+  const reading = readingId ? notifications.find((n) => n.id === readingId) : null;
   // Seçili kaynak varsa yalnızca onun kurulum ekranı gösterilir
   const needsSetup = sources
     .filter((s) => !selection.source || s.name === selection.source)
@@ -93,13 +169,21 @@ function Shell({ notifications, sources, appSettings, ready }) {
         sources={sources}
         counts={counts}
         selection={selection}
+        view={view}
         onSelect={select}
+        onShowPanel={() => setView('panel')}
+        onShowHistory={() => setView('history')}
         onRunNow={(key) => api.sources.runNow(key)}
         onOpenSettings={setSettingsFor}
         onOpenAppSettings={() => setAppSettingsOpen(true)}
         now={now}
       />
 
+      {view === 'panel' ? (
+        <Dashboard sourceNames={sourceNames} now={now} />
+      ) : view === 'history' ? (
+        <HistoryView commands={commands} onRerun={rerun} now={now} />
+      ) : (
       <Feed
         ready={ready}
         title={activeJob?.title ?? (selection.source ? sourceNames[selection.source] : i18n.t('feed.title'))}
@@ -117,10 +201,13 @@ function Shell({ notifications, sources, appSettings, ready }) {
         needsSetup={needsSetup}
         onOpenSettings={setSettingsFor}
         onOpen={(n) => {
+          // Haber uygulama içinde okuyucu panelinde açılır; tarayıcı paneldeki düğmeyle
           if (!n.read) api.notifications.markRead(n.id);
-          if (n.url) api.openExternal(n.url);
+          setReadingId(n.id);
         }}
         onMarkRead={(n) => api.notifications.markRead(n.id)}
+        actions={notificationActions}
+        onRunAction={(command, n) => api.commands.runForNotification(command.id, n.id).catch((err) => report(command, err))}
         onMarkAllRead={() =>
           // Tür seçiliyken yalnızca görünenler; değilse core eklenti/oyun kapsamında işaretler
           selection.tag
@@ -129,14 +216,36 @@ function Shell({ notifications, sources, appSettings, ready }) {
         }
         now={now}
       />
+      )}
 
       {settingsSource && (
         <SettingsPanel source={settingsSource} onClose={() => setSettingsFor(null)} />
       )}
 
+      {/* Bildirim listeden düşerse (temizleme, 500 sınırı) panel kapanır */}
+      {reading && (
+        <ReaderPanel
+          notification={reading}
+          sourceName={sourceNames[reading.source] ?? reading.source}
+          onClose={() => setReadingId(null)}
+        />
+      )}
+
       {appSettingsOpen && (
         <AppSettingsPanel settings={appSettings} onClose={() => setAppSettingsOpen(false)} />
       )}
+
+      {palette && (
+        <CommandPalette
+          commands={commands}
+          uiCommands={uiCommands}
+          sourceNames={sourceNames}
+          request={palette.request}
+          onClose={() => setPalette(null)}
+        />
+      )}
+
+      <RunToasts runs={runs} onDismiss={dismiss} />
     </div>
   );
 }

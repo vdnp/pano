@@ -1,0 +1,29 @@
+{
+  "widgets": {
+    "summary": "Özet",
+    "profile": "Profil",
+    "library": "Son oynananlar",
+    "achievements": "Başarımlar",
+    "broken": "Hatalı kart"
+  },
+  "stat": {
+    "unread": "Okunmamış",
+    "sources": "Kaynak",
+    "uptime": "Çalışma",
+    "minutes": "dakika"
+  },
+  "profile": {
+    "online": "Çevrimiçi",
+    "offline": "Çevrimdışı",
+    "level": "Seviye",
+    "games": "Oyun",
+    "since": "Üyelik"
+  },
+  "library": {
+    "hours": "{hours} saat",
+    "daysAgo": { "one": "{count} gün önce", "other": "{count} gün önce" }
+  },
+  "errors": {
+    "demo": "Demo kaynak bilerek hata verdi. Ayarlardan \"Hata kartını göster\"i kapatabilirsin."
+  }
+}

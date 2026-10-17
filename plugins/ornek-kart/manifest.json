@@ -1,0 +1,14 @@
+{
+  "name": "ornek-kart",
+  "displayName": "Örnek kartlar",
+  "version": "0.1.0",
+  "description": "Panel kartlarını denemek için demo eklenti; yalnızca geliştirme modunda yüklenir.",
+  "main": "index.js",
+  "settings": {
+    "showError": {
+      "type": "boolean",
+      "label": "Hata kartını göster (bir kartın hatasının diğerlerini etkilemediğini görmek için)",
+      "default": false
+    }
+  }
+}

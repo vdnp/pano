@@ -16,7 +16,7 @@
       "addLabel": "Akış ekle",
       "help": "Her satır ayrı bir akış. Görünen ad boş kalırsa akışın kendi başlığı kullanılır. Yeni eklenen akıştan yalnızca son 5 giriş bildirilir.",
       "item": {
-        "url": { "type": "string", "label": "Adres", "required": true, "placeholder": "https://ornek.com/feed.xml" },
+        "url": { "type": "string", "label": "Adres", "required": true, "width": "wide", "placeholder": "https://ornek.com/feed.xml" },
         "name": { "type": "string", "label": "Görünen ad", "placeholder": "İsteğe bağlı" }
       }
     },

@@ -3,7 +3,8 @@ import { useI18n } from '../lib/i18n.jsx';
 import { pluginName } from '../lib/plugin-text.js';
 import { jobKey } from '../lib/filter.js';
 
-function jobStatusText(job, now, { t, time }) {
+function jobStatusText(job, now, { t, time }, source) {
+  if (!job && source?.kinds?.sources === false) return t('rail.status.cardsOnly');
   if (!job) return t('rail.status.waiting');
   if (job.state === 'running') return t('rail.status.running');
   // Anahtarlı hata dil değişince yeniden çevrilir; düz metin olduğu gibi gösterilir
@@ -20,16 +21,14 @@ function summaryState(jobs) {
   return 'idle';
 }
 
+// Alt satırları olan eklentide özet yalnızca hata varken yazılır; alt satırlar kendini anlatır
 function summaryText(jobs, t) {
   const failed = jobs.filter((j) => j.state === 'error').length;
-  if (jobs.some((j) => j.state === 'running')) return t('rail.status.running');
-  return failed
-    ? t('rail.summaryWithErrors', { count: jobs.length, failed })
-    : t('rail.summary', { count: jobs.length });
+  return failed ? t('rail.summaryWithErrors', { count: jobs.length, failed }) : null;
 }
 
 export default function SourceRail({
-  sources, counts, selection, onSelect, onRunNow, onOpenSettings, onOpenAppSettings, now
+  sources, counts, selection, view, onSelect, onShowPanel, onShowHistory, onRunNow, onOpenSettings, onOpenAppSettings, now
 }) {
   const i18n = useI18n();
   const { t } = i18n;
@@ -41,15 +40,33 @@ export default function SourceRail({
         Pano
       </div>
 
-      <nav aria-label={t('rail.sources')}>
+      {/* Ana alanın görünümü: eklenti kartlarından oluşan Panel ya da bildirim akışı */}
+      <nav className="rail-views" aria-label={t('nav.label')}>
         <button
           className="rail-all"
-          aria-current={selection.source === null ? 'true' : undefined}
+          aria-current={view === 'panel' ? 'true' : undefined}
+          onClick={onShowPanel}
+        >
+          <span>{t('nav.panel')}</span>
+        </button>
+        <button
+          className="rail-all"
+          aria-current={view === 'notifications' && selection.source === null ? 'true' : undefined}
           onClick={() => onSelect(null)}
         >
-          <span>{t('rail.all')}</span>
+          <span>{t('nav.notifications')}</span>
           {counts.total > 0 && <span className="count">{counts.total}</span>}
         </button>
+        <button
+          className="rail-all"
+          aria-current={view === 'history' ? 'true' : undefined}
+          onClick={onShowHistory}
+        >
+          <span>{t('nav.history')}</span>
+        </button>
+      </nav>
+
+      <nav aria-label={t('rail.sources')}>
 
         <h2 className="rail-heading">{t('rail.sources')}</h2>
 
@@ -65,12 +82,15 @@ export default function SourceRail({
             const startError = failed ? t(source.startErrorI18n ?? source.startError) : undefined;
             const state = failed ? 'error' : multi ? summaryState(jobs) : job?.state ?? 'idle';
             const singleError = job?.state === 'error' ? t(job.errorI18n ?? job.error) : undefined;
+            const statusText = failed ? t('rail.status.startFailed') : multi ? summaryText(jobs, t) : jobStatusText(job, now, i18n, source);
+            // Hata satırında ayarları açan kısa yol (anahtar eksik, adres hatalı vb. çoğu hata oradan düzelir)
+            const fixable = state === 'error';
             return (
               <li key={source.name} className="source" data-state={state}>
                 <button
                   className="source-main"
                   // Alt satır (oyun/akış) seçiliyse vurgu onda olur
-                  aria-current={selection.source === source.name && !selection.job ? 'true' : undefined}
+                  aria-current={view === 'notifications' && selection.source === source.name && !selection.job ? 'true' : undefined}
                   onClick={() => onSelect(source.name)}
                 >
                   <span className="source-name">
@@ -80,10 +100,17 @@ export default function SourceRail({
                       <span className="count">{counts.bySource[source.name]}</span>
                     )}
                   </span>
-                  <span className="source-status" title={failed ? startError : multi ? undefined : singleError}>
-                    {failed ? t('rail.status.startFailed') : multi ? summaryText(jobs, t) : jobStatusText(job, now, i18n)}
-                  </span>
+                  {statusText && (
+                    <span className="source-status" title={failed ? startError : multi ? undefined : singleError}>
+                      {statusText}
+                    </span>
+                  )}
                 </button>
+                {fixable && (
+                  <button className="link source-fix" onClick={() => onOpenSettings(source.name)}>
+                    {t('rail.fix')}
+                  </button>
+                )}
                 <div className="source-actions">
                   {job && (
                     <button
@@ -115,16 +142,19 @@ export default function SourceRail({
                         <span className="status-dot" aria-hidden="true" />
                         <button
                           className="job-main"
-                          aria-current={selection.source === source.name && selection.job === j.source ? 'true' : undefined}
+                          aria-current={view === 'notifications' && selection.source === source.name && selection.job === j.source ? 'true' : undefined}
                           onClick={() => onSelect(source.name, j.source)}
                         >
                           <span className="job-title">
                             <span className="job-name">{j.title}</span>
                             {unread > 0 && <span className="count">{unread}</span>}
                           </span>
-                          <span className="job-status" title={j.state === 'error' ? t(j.errorI18n ?? j.error) : undefined}>
-                            {jobStatusText(j, now, i18n)}
-                          </span>
+                          {/* Durum yalnızca hata ya da kontrol sürerken yazılır; normalde nokta yeter */}
+                          {(j.state === 'error' || j.state === 'running') && (
+                            <span className="job-status" title={j.state === 'error' ? t(j.errorI18n ?? j.error) : undefined}>
+                              {jobStatusText(j, now, i18n)}
+                            </span>
+                          )}
                         </button>
                         <button
                           className="icon-btn"

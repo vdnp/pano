@@ -1,5 +1,5 @@
-import { ExternalIcon } from './Icons.jsx';
 import { useI18n } from '../lib/i18n.jsx';
+import { commandText } from '../lib/commands.js';
 
 function groupByDay(items, dayLabel) {
   const groups = [];
@@ -56,9 +56,10 @@ function ChipRow({ chips, label, onSelect }) {
 
 export default function Feed({
   ready, title, eyebrow, chips, onSelectChip, typeChips, onSelectTypeChip, items, unreadCount, unreadOnly, onToggleUnread,
-  sourceNames, onSelectOrigin, needsSetup, onOpenSettings, onOpen, onMarkRead, onMarkAllRead, now
+  sourceNames, onSelectOrigin, needsSetup, onOpenSettings, onOpen, onMarkRead, onMarkAllRead, actions = {}, onRunAction, now
 }) {
-  const { t, time } = useI18n();
+  const i18n = useI18n();
+  const { t, time } = i18n;
   return (
     <main className="feed">
       <header className="feed-header">
@@ -106,7 +107,6 @@ export default function Feed({
                     <button className="item-main" onClick={() => onOpen(n)}>
                       <span className="item-title">
                         {n.title}
-                        {n.url && <ExternalIcon />}
                       </span>
                       {n.meta?.excerpt && <span className="item-excerpt">{n.meta.excerpt}</span>}
                       {n.tags.length > 0 && (
@@ -116,11 +116,22 @@ export default function Feed({
                       )}
                     </button>
                   </div>
-                  {!n.read && (
-                    <button className="item-mark" onClick={() => onMarkRead(n)}>
-                      {t('feed.markRead')}
-                    </button>
-                  )}
+                  <div className="item-actions">
+                    {/* Eklentinin bildirim eylemleri (ör. GitHub'da okundu say); komut olarak çalışır */}
+                    {(actions[n.source] ?? []).map((c) => {
+                      const text = commandText(i18n, c.plugin, c.notificationAction.label || c.title, c.name);
+                      return (
+                        <button key={c.id} className="item-mark" onClick={() => onRunAction(c, n)} title={commandText(i18n, c.plugin, c.title, c.name)}>
+                          {text}
+                        </button>
+                      );
+                    })}
+                    {!n.read && (
+                      <button className="item-mark" onClick={() => onMarkRead(n)}>
+                        {t('feed.markRead')}
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ol>

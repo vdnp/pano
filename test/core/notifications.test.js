@@ -153,6 +153,50 @@ describe('notifications', () => {
     });
   });
 
+  describe('tam metin (okuyucu paneli)', () => {
+    it('içeriği bildirimden ayrı saklar', () => {
+      const { notifications } = setup();
+      notifications.add(sample('a', { content: { format: 'bbcode', body: '[p]Merhaba[/p]' } }));
+      expect(notifications.content('a')).toEqual({ format: 'bbcode', body: '[p]Merhaba[/p]' });
+      expect(notifications.list()[0]).not.toHaveProperty('content');
+      expect(notifications.content('yok')).toBeNull();
+    });
+
+    it('geçersiz biçimi ve boş metni yok sayar, 200 KB ile sınırlar', () => {
+      const { notifications } = setup();
+      notifications.add(sample('a', { content: { format: 'pdf', body: 'x' } }));
+      notifications.add(sample('b', { content: { format: 'text', body: '   ' } }));
+      notifications.add(sample('c', { content: { format: 'html', body: 'x'.repeat(250_000) } }));
+      expect(notifications.content('a')).toBeNull();
+      expect(notifications.content('b')).toBeNull();
+      expect(notifications.content('c').body).toHaveLength(200_000);
+    });
+
+    it('bildirim silinince içeriği de silinir', () => {
+      const { notifications, storage } = setup();
+      notifications.add(sample('a', { source: 'x', content: { format: 'text', body: 'A' } }));
+      notifications.add(sample('b', { source: 'y', content: { format: 'text', body: 'B' } }));
+      notifications.clear('x');
+      expect(storage.contents.get('a')).toBeNull();
+      expect(storage.contents.get('b')).toEqual({ format: 'text', body: 'B' });
+    });
+
+    it('500 sınırıyla atılan bildirimin içeriği de silinir', () => {
+      const { notifications, storage } = setup();
+      notifications.add(sample('en-eski', { createdAt: 0, content: { format: 'text', body: 'eski' } }));
+      for (let i = 1; i <= 500; i++) notifications.add(sample(`n${i}`, { createdAt: i }));
+      expect(notifications.list().some((n) => n.id === 'en-eski')).toBe(false);
+      expect(storage.contents.get('en-eski')).toBeNull();
+    });
+
+    it('sığmayan eski bildirimin içeriği hiç yazılmaz', () => {
+      const { notifications, storage } = setup();
+      for (let i = 0; i < 500; i++) notifications.add(sample(`n${i}`, { createdAt: 100 + i }));
+      notifications.add(sample('cok-eski', { createdAt: 1, content: { format: 'text', body: 'x' } }));
+      expect(storage.contents.get('cok-eski')).toBeNull();
+    });
+  });
+
   it('add önce notification:new, sonra notifications:changed yayınlar', () => {
     const { notifications, events } = setup();
     notifications.add(sample('a'));

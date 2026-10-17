@@ -142,11 +142,6 @@ Arama kutusu için: `counter`, `cyberpunk`, `stardew` gibi en az 2 karakterlik s
   hatalar 403 anahtar, 429/529 sık istek, 456 kota, 413 boyut (128 KiB); kullanım
   `GET /v2/usage`. Belgede doğrulanamayanlar: Free anahtarın `:fx` ile bittiği ve düz `EN`'in
   hedef olarak kabulü (`EN-US` kullanılacak, Türkçe `TR`).
-- **Okuyucu paneli, Aşama B: "Tam metni getir".** İçeriği olmayan bildirimler (GitHub, yalnızca
-  özet veren RSS) için main sayfayı indirir (yalnızca http(s), boyut/zaman sınırlı, çerezsiz),
-  arayüz Mozilla Readability ile makaleyi çıkarıp aynı güvenli blok modeliyle gösterir.
-- **Okuyucu paneli, Aşama C: görseller.** CSP gevşetilmeden: main görseli boyut sınırıyla
-  indirip `data:` adresine çevirir.
 - **Microsoft Store için "Bilgisayar açılınca başlat".** MSIX paketinde
   `app.setLoginItemSettings` çalışmaz; paket bildirimine `StartupTask` eklenmeli.
 - **Uygulama ikonu ve Store kutucuk görselleri.**

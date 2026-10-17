@@ -1,4 +1,14 @@
 export const MAX_ITEMS = 500;
+const CONTENT_FORMATS = new Set(['bbcode', 'html', 'text']);
+const MAX_CONTENT = 200_000;
+
+// Okuyucu panelinde gösterilecek tam metin; bildirim nesnesine girmez, ayrı saklanır.
+// Biçim arayüzde güvenli blok modeline çevrilir (HTML olduğu gibi basılmaz).
+function normalizeContent(content) {
+  if (!content || !CONTENT_FORMATS.has(content.format)) return null;
+  const body = String(content.body ?? '').slice(0, MAX_CONTENT);
+  return body.trim() ? { format: content.format, body } : null;
+}
 const LEVELS = new Set(['info', 'warning', 'error']);
 
 // Tüm kaynakların ürettiği bildirimler bu ortak şemaya dönüştürülür.
@@ -40,17 +50,31 @@ export function createNotificationStore(storage, bus) {
 
   return {
     list: repo.list,
+    get: (id) => repo.get(String(id)),
+    content: (id) => storage.contents.get(String(id)),
+
+    // Okuyucunun sonradan getirdiği tam metin (ör. sayfadan çıkarılan makale) önbelleğe yazılır;
+    // bildirim artık yoksa (silinmiş) yazılmaz
+    setContent(id, raw) {
+      const content = normalizeContent(raw);
+      if (!content || !repo.has(String(id))) return false;
+      storage.contents.set(String(id), content);
+      return true;
+    },
 
     // Aynı id daha önce geldiyse false döner (tekrar göstermez).
     add(raw) {
       if (repo.has(String(raw.id))) return false;
       const item = normalize(raw);
+      const content = normalizeContent(raw.content);
       // Liste doluyken en eskiden de eski bir kayıt saklanmaz; "yeni" sayılırsa
       // her kontrolde tekrar masaüstü bildirimi çıkar.
       const kept = storage.transaction(() => {
         repo.insert(item);
         repo.prune(MAX_ITEMS);
-        return repo.has(item.id);
+        const kept = repo.has(item.id);
+        if (kept && content) storage.contents.set(item.id, content);
+        return kept;
       });
       if (!kept) return false;
       bus.emit('notification:new', item);

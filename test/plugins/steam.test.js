@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import steam from '../../plugins/steam/index.js';
-import { cleanText, excerpt, newsType, toNotification } from '../../plugins/steam/news.js';
+import { cleanText, excerpt, newsContent, newsType, toNotification } from '../../plugins/steam/news.js';
 import { searchGames } from '../../plugins/steam/store-search.js';
 import { createContext } from '../../core/context.js';
 import { createNotificationStore } from '../../core/notifications.js';
@@ -110,8 +110,13 @@ describe('steam: bildirime dönüşüm', () => {
         author: 'Valve',
         feedLabel: 'Community Announcements',
         excerpt: '[ UI ] Demo/Replay viewer improvements: Added a progress bar for demo/replay downloads Camera controls now use click-and-drag scheme [ MISC ] Updated AUG reload animation'
-      }
+      },
+      content: { format: 'bbcode', body: NEWS.appnews.newsitems[0].contents }
     });
+  });
+
+  it('basın haberlerinin (feed_type 0) içeriği HTML olarak saklanır', () => {
+    expect(toNotification(NEWS.appnews.newsitems[1], GAME, i18nCtx()).content.format).toBe('html');
   });
 
   it('etiketsiz haber Duyuru olur; ad yoksa uygulama numarası kullanılır', () => {
@@ -248,6 +253,34 @@ describe('steam: kaynak listesi', () => {
   });
 });
 
+describe('steam: tam metin (okuyucu)', () => {
+  const notification = { id: 'steam:1846651706675829', createdAt: 1792018968000, meta: { appId: 730 } };
+
+  it("haberi API'den tarihine göre bulur ve biçimiyle verir", async () => {
+    const ctx = { ...i18nCtx(), fetch: vi.fn(async () => json(NEWS)) };
+    expect(await newsContent(ctx, notification)).toEqual({ format: 'bbcode', body: NEWS.appnews.newsitems[0].contents });
+    const url = new URL(ctx.fetch.mock.calls[0][0]);
+    expect(Object.fromEntries(url.searchParams)).toEqual({ appid: '730', count: '3', maxlength: '0', enddate: '1792018969' });
+  });
+
+  it('basın haberinin içeriği HTML olarak gelir', async () => {
+    const ctx = { ...i18nCtx(), fetch: vi.fn(async () => json(NEWS)) };
+    const press = { id: 'steam:1846018067932423', createdAt: 1791530925000, meta: { appId: 730 } };
+    expect((await newsContent(ctx, press)).format).toBe('html');
+  });
+
+  it('haber yanıtta yoksa null, bilgiler eksikse istek yapmadan null döner', async () => {
+    const ctx = { ...i18nCtx(), fetch: vi.fn(async () => json(NEWS)) };
+    expect(await newsContent(ctx, { ...notification, id: 'steam:999' })).toBeNull();
+    expect(await newsContent(ctx, { ...notification, meta: {} })).toBeNull();
+    expect(ctx.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('eklenti content katkı alanını sunar', () => {
+    expect(steam.content).toBe(newsContent);
+  });
+});
+
 describe('steam: oyun araması', () => {
   it('mağaza sonuçlarını öneriye çevirir, yalnızca uygulamaları alır', async () => {
     const ctx = {
@@ -284,5 +317,25 @@ describe('steam: İngilizce', () => {
 
   it('ctx olmadan kaynak başlığı dil bağımsız biçimde kalır', () => {
     expect(steam.sources({ games: [{ appId: 570, name: '' }] })['news-570'].title).toBe('App 570');
+  });
+});
+
+describe('steam komutu: oyunu başlat', () => {
+  const command = steam.commands.launchGame;
+  const manifest = JSON.parse(fs.readFileSync(new URL('../../plugins/steam/manifest.json', import.meta.url), 'utf8'));
+
+  it("steam://rungameid/<appId> açar ve oyun adıyla sonuç verir; izin manifest'te beyanlı", async () => {
+    const ctx = { ...i18nCtx(), openExternal: vi.fn(async () => {}) };
+    expect(await command.run(ctx, { appId: 730, name: 'Counter-Strike 2' })).toEqual({ message: "Steam'de başlatılıyor: Counter-Strike 2" });
+    expect(ctx.openExternal).toHaveBeenCalledWith('steam://rungameid/730');
+    expect((await command.run(ctx, { appId: 570 })).message).toBe("Steam'de başlatılıyor: Steam uygulaması 570");
+    expect(manifest.permissions).toEqual(['openExternal']);
+  });
+
+  it('geçersiz App ID açılmaz; oyun araması önerisi bildirilmiş', async () => {
+    const ctx = { ...i18nCtx(), openExternal: vi.fn() };
+    await expect(command.run(ctx, { appId: 1.5 })).rejects.toThrow('Geçersiz App ID');
+    expect(ctx.openExternal).not.toHaveBeenCalled();
+    expect(command.params.appId.suggest.provider).toBe('searchGames');
   });
 });

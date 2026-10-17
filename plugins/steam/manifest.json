@@ -2,8 +2,9 @@
   "name": "steam",
   "displayName": "Steam",
   "version": "0.1.0",
-  "description": "Takip ettiğin oyunların Steam haberlerini ve yama notlarını bildirir.",
+  "description": "Takip ettiğin oyunların Steam haberlerini bildirir; profilini, kütüphaneni ve başarımlarını panelde gösterir.",
   "main": "index.js",
+  "permissions": ["openExternal"],
   "setup": {
     "title": "Henüz oyun eklenmedi",
     "body": "Haberlerini takip etmek istediğin oyunları ayarlardan adıyla arayıp ekle. Yeni haberler burada bildirim olarak görünür; ilk eklemede her oyundan yalnızca son 3 haber gelir.",
@@ -15,10 +16,22 @@
       "label": "Oyunlar",
       "addLabel": "Elle ekle",
       "help": "Oyunu adıyla ara ve sonuçtan seç. App ID'yi biliyorsan \"Elle ekle\" ile de yazabilirsin.",
-      "suggest": { "provider": "searchGames", "placeholder": "Oyun adıyla ara" },
+      "suggest": {
+        "provider": "searchGames",
+        "placeholder": "Oyun adıyla ara"
+      },
       "item": {
-        "appId": { "type": "number", "label": "App ID", "required": true, "min": 1 },
-        "name": { "type": "string", "label": "Oyun", "placeholder": "İsteğe bağlı" }
+        "appId": {
+          "type": "number",
+          "label": "App ID",
+          "required": true,
+          "min": 1
+        },
+        "name": {
+          "type": "string",
+          "label": "Oyun",
+          "placeholder": "İsteğe bağlı"
+        }
       }
     },
     "officialOnly": {
@@ -37,6 +50,76 @@
       "default": 30,
       "min": 5,
       "max": 1440
+    },
+    "steamId": {
+      "type": "string",
+      "label": "Steam hesabı",
+      "placeholder": "SteamID64 ya da profil adresi",
+      "help": "Profil kartları için 7656119… ile başlayan SteamID'ni ya da profil adresini (steamcommunity.com/id/… veya /profiles/…) yaz. Kartlar için API anahtarı da gerekir."
+    },
+    "achievementGames": {
+      "type": "list",
+      "label": "Başarım kartları",
+      "addLabel": "Elle ekle",
+      "help": "Başarım ilerlemesini panelde görmek istediğin oyunları ara ve ekle; her oyun için bir kart oluşur.",
+      "suggest": {
+        "provider": "searchGames",
+        "placeholder": "Oyun adıyla ara"
+      },
+      "item": {
+        "appId": {
+          "type": "number",
+          "label": "App ID",
+          "required": true,
+          "min": 1
+        },
+        "name": {
+          "type": "string",
+          "label": "Oyun",
+          "placeholder": "İsteğe bağlı"
+        }
+      }
+    },
+    "friendsOnline": {
+      "type": "boolean",
+      "label": "Seçili arkadaşlar çevrimiçi olunca ya da oyuna girince bildir",
+      "default": false
+    },
+    "friends": {
+      "type": "list",
+      "label": "Takip edilen arkadaşlar",
+      "addLabel": "Elle ekle",
+      "help": "Arkadaş listen herkese açık olmalı. Arkadaşını adıyla ara ya da SteamID64'ünü elle ekle.",
+      "suggest": {
+        "provider": "searchFriends",
+        "placeholder": "Arkadaş adıyla ara"
+      },
+      "item": {
+        "steamId": {
+          "type": "string",
+          "label": "SteamID64",
+          "required": true
+        },
+        "name": {
+          "type": "string",
+          "label": "Ad",
+          "placeholder": "İsteğe bağlı"
+        }
+      }
+    },
+    "friendsInterval": {
+      "type": "number",
+      "label": "Arkadaş kontrol sıklığı (dakika)",
+      "default": 5,
+      "min": 2,
+      "max": 60
+    }
+  },
+  "secrets": {
+    "apiKey": {
+      "label": "Steam Web API anahtarı",
+      "help": "Profil, kütüphane, başarım kartları ve arkadaş bildirimleri için gerekir. Steam hesabınla giriş yap ve alan adı olarak örneğin \"localhost\" yazıp ücretsiz anahtar al. Anahtar yalnızca bu bilgisayarda şifreli saklanır.",
+      "helpUrl": "https://steamcommunity.com/dev/apikey"
     }
   }
 }

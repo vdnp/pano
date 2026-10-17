@@ -4,7 +4,8 @@
     "invalidToken": "GitHub anahtarı geçersiz veya süresi dolmuş.",
     "rateLimited": "GitHub istek sınırına ulaşıldı. {at, time} sonrasında tekrar denenecek.",
     "forbidden": "GitHub erişimi reddetti. Anahtarın notifications iznine sahip olduğunu kontrol et.",
-    "http": "GitHub beklenmeyen bir yanıt verdi ({status})."
+    "http": "GitHub beklenmeyen bir yanıt verdi ({status}).",
+    "threadNotFound": "Bu bildirim GitHub'da bulunamadı; silinmiş ya da erişimin kalkmış olabilir."
   },
   "reason": {
     "approval_requested": "Onay istendi",
@@ -30,5 +31,14 @@
     "CheckSuite": "Kontrol",
     "RepositoryVulnerabilityAlert": "Güvenlik"
   },
-  "untitled": "(başlıksız)"
+  "untitled": "(başlıksız)",
+  "commands": {
+    "markThreadRead": {
+      "title": "Bildirimi GitHub'da okundu say",
+      "description": "Bildirimi GitHub hesabında da okundu olarak işaretler.",
+      "short": "GitHub'da okundu say",
+      "threadId": "Bildirim (thread) kimliği",
+      "done": "Bildirim GitHub'da okundu sayıldı."
+    }
+  }
 }

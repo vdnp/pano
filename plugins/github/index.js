@@ -1,5 +1,12 @@
 const API = 'https://api.github.com/notifications';
 
+const headersFor = (token) => ({
+  Accept: 'application/vnd.github+json',
+  Authorization: `Bearer ${token}`,
+  'X-GitHub-Api-Version': '2022-11-28',
+  'User-Agent': 'Pano'
+});
+
 // Tanınan sebep ve türler bildirim etiketinde çeviri anahtarı olarak saklanır
 // (github:reason.mention); bilinmeyen yeni değerler GitHub'ın verdiği haliyle kalır.
 const REASONS = new Set([
@@ -54,12 +61,7 @@ export default {
           participating: String(Boolean(ctx.settings.get('participatingOnly')))
         }).toString();
 
-        const headers = {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${token}`,
-          'X-GitHub-Api-Version': '2022-11-28',
-          'User-Agent': 'Pano'
-        };
+        const headers = headersFor(token);
 
         // Değişiklik yoksa GitHub 304 döner ve istek sınırından düşmez.
         const lastModified = ctx.state.get('lastModified');
@@ -97,6 +99,36 @@ export default {
         ctx.state.set('lastModified', res.headers.get('last-modified'));
         ctx.state.set('lastQuery', query);
         if (added) ctx.log(`${added} yeni bildirim`);
+      }
+    }
+  },
+
+  commands: {
+    // PATCH /notifications/threads/{thread_id}: 205 okundu işaretlendi
+    markThreadRead: {
+      title: 'commands.markThreadRead.title',
+      description: 'commands.markThreadRead.description',
+      // Kimliği elle yazmak anlamsız; bildirim satırındaki düğmeden çalışır
+      palette: false,
+      params: {
+        threadId: { type: 'string', label: 'commands.markThreadRead.threadId', required: true }
+      },
+      notificationAction: {
+        label: 'commands.markThreadRead.short',
+        params: (n) => (n.meta?.threadId ? { threadId: String(n.meta.threadId) } : null),
+        // Başarılı olunca bildirim Pano'da da okundu olur
+        markRead: true
+      },
+      async run(ctx, { threadId }, { signal }) {
+        const token = ctx.secrets.get('token');
+        if (!token) throw ctx.error('errors.noToken');
+        if (!/^\d{1,20}$/.test(threadId)) throw ctx.error('errors.threadNotFound');
+
+        const res = await ctx.fetch(`${API}/threads/${threadId}`, { method: 'PATCH', headers: headersFor(token), signal });
+        if (res.status === 404) throw ctx.error('errors.threadNotFound');
+        // 205 Reset Content; 304 zaten okunmuş
+        if (!res.ok && res.status !== 304) throw describeError(ctx, res);
+        return { message: ctx.t('commands.markThreadRead.done') };
       }
     }
   }

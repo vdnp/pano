@@ -16,7 +16,9 @@ uyar; ileriki aşamaya ait altyapıyı erkenden kurma.
 ```
 core/          Electron'dan bağımsız çekirdek (createCore → bus, start/stop, notifications, sources)
   loader.js    plugins/*/manifest.json okur, default export'u dinamik import eder
-  context.js   eklentiye verilen ctx
+  context.js   eklentiye verilen ctx (izinli yetenekler: forCommand)
+  schema.js    ayar ve komut parametresi şeması (coerce, validateParams)
+  commands.js  komut kayıt defteri, çalıştırma (iptal, ilerleme), geçmiş (en yeni 200)
   scheduler.js zincirleme setTimeout ile kaynak işleri, durum olayları
   notifications.js  ortak bildirim şeması, id ile tekrar engelleme, en fazla 500 kayıt
   secrets.js   şifreleme dışarıdan verilen (cipher) gizli alan deposu
@@ -26,8 +28,12 @@ core/          Electron'dan bağımsız çekirdek (createCore → bus, start/sto
 plugins/github/  örnek kaynak eklentisi (manifest.json + index.js)
 plugins/rss/     ayarlardaki her akış ayrı kaynak işi (sources fonksiyon); ilk çalıştırmada son 5 giriş
 plugins/steam/   api.js (ortak istek/hata), news.js (GetNewsForApp, news-<appId> işleri),
-                 store-search.js (resmî olmayan mağaza araması); profil/kütüphane buraya eklenecek
-src/main/      Electron ana süreç: cipher (safeStorage), IPC, masaüstü bildirimleri, pencere
+                 store-search.js (resmî olmayan mağaza araması), profile.js (anahtarlı Web API:
+                 SteamID çözme, profile/recent/library/achievements sağlayıcıları ve kartları,
+                 isteğe bağlı arkadaş bildirimi `friends`)
+plugins/ornek-kart/  panel kartları demosu; yalnızca geliştirmede yüklenir (extraResources filtresi)
+src/main/      Electron ana süreç: cipher (safeStorage), IPC, masaüstü bildirimleri, pencere, tepsi,
+               genel kısayol (Ctrl/Cmd+Shift+Space → palet); urls.js dışarıda açılabilir adresler
 src/preload/   window.pano köprüsü (contextBridge)
 src/renderer/  React arayüz (App.jsx, components/, lib/usePano.js, lib/i18n.jsx, styles.css)
 shared/i18n.js çeviri modülü (core, main ve arayüz ortak; saf JS)
@@ -50,15 +56,46 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
      ayarlardan bu nesneyi hesaplayan senkron `(settings) => {...}` fonksiyonu.
      `syncSources()` start ve her ayar kaydında işleri ekler/siler/günceller; kaynak
      kimliği sabit kalmalı (RSS: adresin hash'i), yoksa iş ve durumu yeniden kurulur.
+     Kaynak kendi aralığını `interval` (dakika) ile verebilir; yoksa ayarlardaki `interval`.
    - `suggest`: `{ [provider]: async (ctx, query) => [{ label, detail?, value }] }`. Yalnızca
      bir list alanının manifest'te `suggest: { provider, placeholder? }` ile bildirdiği
      sağlayıcı çağrılabilir (IPC `sources:suggest`); `value` listenin alt şemasından geçer.
-   - `providers`, `widgets`, `commands` (ileride): aynı biçimde alan olarak eklenir,
-     `core/index.js` `start()` içinde katkı türü başına kayıt yapılır.
+   - `providers`: `{ [id]: { title, ttl?, async get(ctx, params) } }` istek üzerine veri
+     ("durum"). `core/providers.js` sonucu depoda (`provider_cache`) ttl süresince önbelleğe
+     alır (en az 10 sn, varsayılan 300), aynı anda gelen aynı istekleri birleştirir; hata
+     olursa eski veri `stale` olarak döner. Sonuç JSON'a çevrilebilir ve ≤256 KB olmalı.
+   - `widgets`: `{ [id]: { title, view, provider, params?, size?: 'wide', hidden?, map(data, ctx) } }`
+     ya da `(settings, ctx) => {...}`. Eklenti arayüz kodu yazmaz: `map` core'da çalışır,
+     çıktısı `core/widgets.js`'te görünüm şemasına göre temizlenir (stat | list (`icon` ya da geniş `cover`) | profile |
+     progress; metin kırpma, yalnızca http(s), sayı sınırı). `title` eklenti kataloğunda
+     anahtar olabilir (`widgets.summary`). Uzak görseller CSP açılmadan `web:image` ile gelir.
+     `progress` isteğe bağlı `events: [{ label, meta }]` (çubuksuz satırlar) taşır. `hidden: true` kart
+     düzene ilk kez gizli eklenir (demo kartları). Panel düzeni kv `dashboard` = `{ cards: [{ id: 'eklenti/kart', visible }] }`;
+     Düzenle modunda sıra sürükle-bırak (`dropCard`) ya da oklarla değişir. Izgara
+     sütun sayısı panel genişliğinden (`columnsFor`), geniş kartın kapladığı sütun `layoutSpans`'tan
+     gelir (lib/dashboard.js): sıra hiç değişmez, satıra sığmayan geniş kart satırın kalanını
+     doldurur. CSS `grid-auto-flow: dense` kullanılmaz (sırayı bozar).
+   - `content(ctx, bildirim)`: "Tam metni getir" için tam metin (bkz. kural 4).
+   - `commands`: `{ [ad]: { title, description?, params?, confirm?, palette?, notificationAction?,
+     async run(ctx, params, { signal, progress }) → { message? } } }` ya da `(settings, ctx) => {...}`.
+     Anahtar `eklenti/komut`; uygulamanın kendi komutları `pano/…` ("pano" eklenti adı ayrılmış).
+     `params` ayarlarla aynı şema (`core/schema.js`; `secret: true` geçmişe yazılmaz, `suggest`
+     eklentinin `suggest` sağlayıcısı, öneri `value`'su birden fazla parametreyi doldurabilir).
+     Geçersiz parametre çalışmadan hata verir. `progress(0..1, mesaj)`; iptalde `signal` tetiklenir
+     ve çalıştırma hemen "iptal" biter (geç gelen sonuç yok sayılır). Her çalıştırma `command_history`
+     tablosuna yazılır (migration 8). `notificationAction: { label, params(bildirim), markRead? }`
+     akışta o eklentinin bildirim satırında düğme olur (parametreler core'da bildirimden çıkarılır).
+     `palette: false` paletten gizler. Palet liste türü parametreyi sormaz.
+   - **İzinler** (`manifest.permissions`: `openExternal`, `runCommand`): beyan edilmeyen ya da komut
+     dışında (ör. kaynak işinde) çağrılan `ctx.openExternal` / `ctx.runCommand` anlaşılır hata verir.
+     `runCommand` onay (`confirm`) isteyen komutu çalıştıramaz, zincir en fazla 3 derinlik.
+     Adres denetimi main'de (`src/main/urls.js`): http(s) ve yalnızca `steam://rungameid/<rakam>`.
+     Dosya sistemi, kabuk komutu gibi yetenekler izin sistemiyle sonraki aşamalarda gelir.
    Ayarlar ve gizli alanlar `manifest.json` (`settings`, `secrets`) şemasından gelir;
    ayarlar paneli bu şemadan otomatik oluşur. Ayar türleri: `number` (min/max),
    `boolean`, `string`, `list` (`item` alt şeması, `required` alanlar, en fazla 50 öğe,
-   iç içe liste yok; boş satır ham değere göre, `required` sayılarda da geçerli). İsteğe bağlı `setup: { title, body, action }`: eklentinin hiç
+   iç içe liste yok; boş satır ham değere göre, `required` sayılarda da geçerli; alt alanın
+   `width: 'wide'` ipucu ayarlar panelinde o sütunu genişletir). İsteğe bağlı `setup: { title, body, action }`: eklentinin hiç
    kaynağı yokken (ör. akışsız RSS) akışta gösterilen kurulum ekranı metni. `manifest.name`: `^[a-z0-9][a-z0-9-]*$`.
 3. **Eklentiler Node'a doğrudan erişmez**, yalnızca `core/context.js`'deki `ctx`
    üzerinden: `log`, `warn`, `notify`, `fetch` (20 sn zaman aşımı), `settings.get/all`,
@@ -73,8 +110,21 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
    görünür; oyun/akış/depo adı olmalı. Eklenti `ctx.notify` çağırır; id otomatik
    `eklenti:id` olarak öneklenir. `job` (bildirimi üreten kaynak işi, ör. `news-730`) core
    tarafından yazılır: işler eklentiyi `ctx.forJob(id)` kopyasıyla çalıştırır. Arayüz bununla
-   oyun/akış bazında, `tags` ile de tür bazında (çipler, `lib/filter.js`) süzer. Şemayı genişletmek gerekirse `normalize()` güncellenir,
-   başka yerde bildirim nesnesi üretilmez.
+   oyun/akış bazında, `tags` ile de tür bazında (çipler, `lib/filter.js`) süzer.
+   Tam metin `ctx.notify({ ..., content: { format: 'bbcode'|'html'|'text', body } })` ile verilir;
+   bildirimden ayrı `contents` tablosunda (≤200 KB, bildirimle birlikte silinir) saklanır ve
+   okuyucu paneli `notifications:content` ile ister. **Dış içerik asla HTML olarak basılmaz**:
+   `lib/content.js` DOMParser + izinli öğe listesiyle blok modeline çevirir, React çizer;
+   bağlantı/görsel yalnızca http(s). "Tam metni getir" ve görseller `core/web.js` ile indirilir
+   (IPC `web:page`, `web:image`): main ayrı, bellekte tutulan `pano-reader` oturumunun
+   Chromium fetch'ini verir (Node fetch Cloudflare'a takılır); oturum filtresi her adımda
+   http(s) dışını ve yerel ağı (`isPrivateHost`) engeller, çerez gönderilmez. Görseller
+   `data:` adresi olarak gelir (CSP değişmez, SVG kabul edilmez); makale Readability ile
+   çıkarılıp yine `lib/content.js`'ten geçer ve `notifications:setContent` ile önbelleğe yazılır.
+   "Tam metni getir" önce eklentiye sorar: isteğe bağlı katkı alanı `content(ctx, bildirim)`
+   → `{ format, body } | null` (Steam metni API'den alır; sayfası JavaScript ile yüklenir).
+   Kısa ve çoğu bağlantı olan Readability sonucu (alt bilgi/menü) makale sayılmaz.
+   Şemayı genişletmek gerekirse `normalize()` güncellenir, başka yerde bildirim nesnesi üretilmez.
 5. **Arayüz yalnızca `window.pano` köprüsünü kullanır** (`lib/usePano.js` → `api`).
    Yeni IPC kanalı eklenince üç yer birlikte güncellenir: `src/main` `registerIpc()`
    (`handle`, argümanları `String()` vb. ile temizle), `src/preload` köprü nesnesi ve

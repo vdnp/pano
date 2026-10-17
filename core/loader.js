@@ -18,11 +18,15 @@ async function readLocales(root, logger) {
   return locales;
 }
 
+// "pano" uygulamanın kendi komutlarına ayrılmıştır (pano/runAll)
+const RESERVED = new Set(['pano']);
+
 function validateManifest(manifest) {
   if (!manifest || typeof manifest !== 'object') throw new Error('manifest.json okunamadı');
   if (!NAME_PATTERN.test(manifest.name ?? '')) {
     throw new Error('manifest.name küçük harf, rakam ve tire içermeli');
   }
+  if (RESERVED.has(manifest.name)) throw new Error(`"${manifest.name}" adı uygulamaya ayrılmış`);
 }
 
 // Verilen klasörlerdeki her alt klasörü bir eklenti olarak yükler.

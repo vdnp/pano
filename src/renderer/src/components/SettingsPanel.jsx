@@ -3,6 +3,7 @@ import { api } from '../lib/usePano.js';
 import { CloseIcon } from './Icons.jsx';
 import { useI18n } from '../lib/i18n.jsx';
 import { pluginName, pluginText } from '../lib/plugin-text.js';
+import { ipcMessage } from '../lib/ipc.js';
 
 const MAX_LIST_ITEMS = 50;
 
@@ -22,9 +23,6 @@ function emptyRow(fields) {
   return withRowKey(Object.fromEntries(fields.map(([key, s]) => [key, s.default ?? (s.type === 'boolean' ? false : '')])));
 }
 
-// Electron, ana süreçteki hatayı "Error invoking remote method ..." önekiyle iletir
-const ipcMessage = (err) =>
-  String(err?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
 let suggestId = 0;
 
@@ -143,7 +141,11 @@ function ListField({ name, plugin, schema, rows, onChange, firstRef, txt }) {
   const base = `settings.${name}`;
   const fields = Object.entries(schema.item ?? {}).filter(([, s]) => s.type !== 'list');
   const hasSuggest = Boolean(schema.suggest?.provider);
-  const columns = { gridTemplateColumns: `repeat(${fields.length}, minmax(0, 1fr)) 30px` };
+  // Sütun genişliği alan türüne göre: sayı dar, metin geniş; manifest'te width: 'wide' daha da geniş
+  const weight = (s) => (s.width === 'wide' ? 3 : s.type === 'number' || s.type === 'boolean' ? 1 : 2);
+  const columns = {
+    gridTemplateColumns: `${fields.map(([, s]) => `minmax(0, ${weight(s)}fr)`).join(' ')} 30px`
+  };
   const update = (index, key, value) =>
     onChange(rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
 
@@ -344,6 +346,17 @@ export default function SettingsPanel({ source, onClose }) {
             </button>
           </div>
         </form>
+
+        {/* Eklentinin manifest'te beyan ettiği izinler (yalnızca bilgi) */}
+        {source.permissions?.length > 0 && (
+          <section className="permissions" aria-labelledby="permissions-title">
+            <h3 id="permissions-title">{t('settings.permissions')}</h3>
+            <p className="help">{t('settings.permissionsHelp')}</p>
+            <ul>
+              {source.permissions.map((p) => <li key={p}>{t(`core.permissions.names.${p}`)}</li>)}
+            </ul>
+          </section>
+        )}
       </aside>
     </div>
   );

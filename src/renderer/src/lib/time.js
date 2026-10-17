@@ -2,12 +2,15 @@ const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).g
 
 // Göreli zaman, gün başlığı ve saat; seçili dilin biçimleriyle
 export function createTimeFormat({ locale, t }) {
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  const wideRtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  // Dar biçim (ör. kart başlığındaki "4 dk. önce") az yer kaplar
+  const narrowRtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
 
-  function relativeTime(ts, now = Date.now()) {
+  function relativeTime(ts, now = Date.now(), { narrow = false } = {}) {
     if (!ts) return '';
     const diff = (ts - now) / 1000;
     const abs = Math.abs(diff);
+    const rtf = narrow ? narrowRtf : wideRtf;
     if (abs < 45) return t('time.justNow');
     if (abs < 3600) return rtf.format(Math.round(diff / 60), 'minute');
     if (abs < 86400) return rtf.format(Math.round(diff / 3600), 'hour');

@@ -1,0 +1,36 @@
+{
+  "widgets": {
+    "summary": "Summary",
+    "profile": "Profile",
+    "library": "Recently played",
+    "achievements": "Achievements",
+    "broken": "Broken card"
+  },
+  "stat": {
+    "unread": "Unread",
+    "sources": "Sources",
+    "uptime": "Uptime",
+    "minutes": "minutes"
+  },
+  "profile": {
+    "online": "Online",
+    "offline": "Offline",
+    "level": "Level",
+    "games": "Games",
+    "since": "Member since"
+  },
+  "library": {
+    "hours": "{hours} hours",
+    "daysAgo": { "one": "{count} day ago", "other": "{count} days ago" }
+  },
+  "errors": {
+    "demo": "The demo source failed on purpose. You can turn off \"Show error card\" in the settings."
+  },
+  "manifest": {
+    "displayName": "Sample cards",
+    "description": "Demo plugin for trying out dashboard cards; loaded only in development mode.",
+    "settings": {
+      "showError": { "label": "Show error card (to see that one card's error does not affect the others)" }
+    }
+  }
+}

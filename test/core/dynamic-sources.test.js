@@ -193,6 +193,31 @@ describe('ayarlara göre değişen kaynaklar', () => {
     removeDir(other);
   });
 
+  it('tam metni önce bildirimi üreten eklentiden ister, vermeyen eklentide null döner', async () => {
+    const other = tempDir('pano-content-');
+    writePlugin(other, 'kaynakli', { name: 'kaynakli' }, `
+      export default {
+        sources: { a: { title: 'A', run(ctx) { ctx.notify({ id: '1', title: 'Bir' }); ctx.notify({ id: '2', title: 'İki' }); } } },
+        async content(ctx, n) { return n.id === 'kaynakli:1' ? { format: 'text', body: 'Tam metin: ' + n.title } : null; }
+      };`);
+    writePlugin(other, 'duz', { name: 'duz' }, `
+      export default { sources: { a: { title: 'A', run(ctx) { ctx.notify({ id: '1', title: 'Düz' }); } } } };`);
+    const c = createCore({ pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
+    await c.start();
+    await c.sources.runNow('kaynakli/a');
+    await c.sources.runNow('duz/a');
+
+    expect(await c.notifications.fetchContent('kaynakli:1')).toEqual({ format: 'text', body: 'Tam metin: Bir' });
+    // Önbelleğe yazıldı
+    expect(c.notifications.content('kaynakli:1')).toEqual({ format: 'text', body: 'Tam metin: Bir' });
+    expect(await c.notifications.fetchContent('kaynakli:2')).toBeNull();
+    expect(await c.notifications.fetchContent('duz:1')).toBeNull();
+    expect(await c.notifications.fetchContent('yok:1')).toBeNull();
+
+    await c.stop();
+    removeDir(other);
+  });
+
   it('kaynak fonksiyonu hata verirse loglar ve iş bırakmaz', () => {
     setFeeds([{ url: 'https://a' }]);
     setFeeds([{ url: 'patlat' }]);

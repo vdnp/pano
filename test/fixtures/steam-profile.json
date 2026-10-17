@@ -1,0 +1,84 @@
+{
+  "_note": "Steam Web API örnek yanıtları; alan adları yaygın kullanılan yanıt biçiminden, değerler uydurma.",
+  "summaries": {
+    "response": {
+      "players": [
+        {
+          "steamid": "76561197960435530",
+          "communityvisibilitystate": 3,
+          "profilestate": 1,
+          "personaname": "Pano Test",
+          "profileurl": "https://steamcommunity.com/id/panotest/",
+          "avatar": "https://avatars.steamstatic.com/abc.jpg",
+          "avatarmedium": "https://avatars.steamstatic.com/abc_medium.jpg",
+          "avatarfull": "https://avatars.steamstatic.com/abc_full.jpg",
+          "personastate": 1,
+          "timecreated": 1063407589,
+          "gameid": "730",
+          "gameextrainfo": "Counter-Strike 2"
+        }
+      ]
+    }
+  },
+  "vanity": { "response": { "steamid": "76561197960435530", "success": 1 } },
+  "vanityMissing": { "response": { "success": 42, "message": "No match" } },
+  "recent": {
+    "response": {
+      "total_count": 3,
+      "games": [
+        { "appid": 413150, "name": "Stardew Valley", "playtime_2weeks": 95, "playtime_forever": 5760 },
+        { "appid": 730, "name": "Counter-Strike 2", "playtime_2weeks": 630, "playtime_forever": 24720 },
+        { "appid": 359550, "name": "Tom Clancy's Rainbow Six Siege", "playtime_2weeks": 12, "playtime_forever": 14280 }
+      ]
+    }
+  },
+  "owned": {
+    "response": {
+      "game_count": 6,
+      "games": [
+        { "appid": 730, "name": "Counter-Strike 2", "playtime_forever": 24720, "img_icon_url": "x" },
+        { "appid": 359550, "name": "Tom Clancy's Rainbow Six Siege", "playtime_forever": 14280 },
+        { "appid": 413150, "name": "Stardew Valley", "playtime_forever": 5760 },
+        { "appid": 1091500, "name": "Cyberpunk 2077", "playtime_forever": 4260 },
+        { "appid": 292030, "name": "The Witcher 3: Wild Hunt", "playtime_forever": 30 },
+        { "appid": 620, "name": "Portal 2", "playtime_forever": 0 }
+      ]
+    }
+  },
+  "achievements": {
+    "playerstats": {
+      "steamID": "76561197960435530",
+      "gameName": "Stardew Valley",
+      "success": true,
+      "achievements": [
+        { "apiname": "Achievement_Greenhorn", "achieved": 1, "unlocktime": 1700000000, "name": "Acemi", "description": "" },
+        { "apiname": "Achievement_Cowpoke", "achieved": 1, "unlocktime": 1710000000, "name": "Kovboy", "description": "" },
+        { "apiname": "Achievement_Homesteader", "achieved": 0, "unlocktime": 0, "name": "Çiftçi", "description": "" },
+        { "apiname": "Achievement_Secret", "achieved": 0, "unlocktime": 0, "name": "Gizli", "description": "" }
+      ]
+    }
+  },
+  "schema": {
+    "game": {
+      "gameName": "Stardew Valley",
+      "availableGameStats": {
+        "achievements": [
+          { "name": "Achievement_Greenhorn", "displayName": "Acemi", "hidden": 0 },
+          { "name": "Achievement_Cowpoke", "displayName": "Kovboy", "hidden": 0 },
+          { "name": "Achievement_Homesteader", "displayName": "Çiftçi", "hidden": 0 },
+          { "name": "Achievement_Secret", "displayName": "Gizli", "hidden": 1 }
+        ]
+      }
+    }
+  },
+  "achievementsPrivate": { "playerstats": { "error": "Profile is not public", "success": false } },
+  "achievementsNone": { "playerstats": { "error": "Requested app has no stats", "success": false } },
+  "friendList": {
+    "friendslist": {
+      "friends": [
+        { "steamid": "76561197960265731", "relationship": "friend", "friend_since": 1500000000 },
+        { "steamid": "76561197960265732", "relationship": "friend", "friend_since": 1500000000 }
+      ]
+    }
+  }
+}

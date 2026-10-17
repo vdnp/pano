@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-const EVENTS = new Set(['notifications:changed', 'sources:changed', 'appSettings:changed']);
+const EVENTS = new Set([
+  'notifications:changed', 'sources:changed', 'appSettings:changed',
+  'commands:started', 'commands:progress', 'commands:finished', 'palette:open'
+]);
 const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
 
 // Arayüz sadece bu nesneyi görür; Node veya ipcRenderer'a doğrudan erişemez.
@@ -8,6 +11,9 @@ contextBridge.exposeInMainWorld('pano', {
   notifications: {
     list: invoke('notifications:list'),
     markRead: invoke('notifications:markRead'),
+    content: invoke('notifications:content'),
+    setContent: invoke('notifications:setContent'),
+    fetchContent: invoke('notifications:fetchContent'),
     markAllRead: invoke('notifications:markAllRead'),
     clear: invoke('notifications:clear')
   },
@@ -21,6 +27,28 @@ contextBridge.exposeInMainWorld('pano', {
   appSettings: {
     get: invoke('appSettings:get'),
     set: invoke('appSettings:set')
+  },
+  widgets: {
+    list: invoke('widgets:list'),
+    data: invoke('widgets:data')
+  },
+  dashboard: {
+    get: invoke('dashboard:get'),
+    set: invoke('dashboard:set')
+  },
+  web: {
+    page: invoke('web:page'),
+    image: invoke('web:image')
+  },
+  commands: {
+    list: invoke('commands:list'),
+    run: invoke('commands:run'),
+    cancel: invoke('commands:cancel'),
+    running: invoke('commands:running'),
+    history: invoke('commands:history'),
+    clearHistory: invoke('commands:clearHistory'),
+    suggest: invoke('commands:suggest'),
+    runForNotification: invoke('commands:runForNotification')
   },
   openExternal: invoke('app:openExternal'),
 

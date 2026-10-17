@@ -80,8 +80,33 @@ export function toNotification(item, game, ctx) {
       author: String(item.author ?? ''),
       feedLabel: String(item.feedlabel ?? ''),
       excerpt: excerpt(cleanText(item.contents))
-    }
+    },
+    content: contentOf(item)
   };
+}
+
+// Okuyucu paneli için tam metin: resmî duyurular (feed_type 1) BBCode, basın haberleri HTML
+const contentOf = (item) => ({ format: item.feed_type === 1 ? 'bbcode' : 'html', body: String(item.contents ?? '') });
+
+// "Tam metni getir" (core'un content katkı alanı): tam metni olmayan eski bildirimler için.
+// Steam'in haber sayfası içeriği JavaScript ile yüklediğinden sayfa indirmek işe yaramaz;
+// haber API'den tarihine göre bulunur (enddate: bu tarihten öncekiler, en yenisi başta).
+export async function newsContent(ctx, notification) {
+  const appId = Number(notification.meta?.appId);
+  const gid = notification.id.slice(notification.id.indexOf(':') + 1);
+  if (!Number.isInteger(appId) || !gid || !Number.isFinite(notification.createdAt)) return null;
+
+  const params = new URLSearchParams({
+    appid: String(appId),
+    count: '3',
+    maxlength: '0',
+    enddate: String(Math.floor(notification.createdAt / 1000) + 1)
+  });
+  const data = await getJson(ctx, `${NEWS_API}?${params}`, {
+    notFound: () => ctx.error('errors.noNews', { appId })
+  });
+  const item = (data?.appnews?.newsitems ?? []).find((n) => String(n?.gid) === gid);
+  return item ? contentOf(item) : null;
 }
 
 export async function checkNews(ctx, game) {

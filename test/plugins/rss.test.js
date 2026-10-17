@@ -14,6 +14,9 @@ const RSS = fixture('rss2.xml');
 const ATOM = fixture('atom.xml');
 const FEED_URL = 'https://blog.example.com/feed.xml';
 
+// Ayrıştırma beklentileri içerik dışındaki alanlar için; içerik ayrı testte
+const withoutContent = (entries) => entries.map(({ content, ...rest }) => rest);
+
 const xml = (body, headers = {}, status = 200) =>
   new Response(body, { status, headers: { 'content-type': 'application/xml', ...headers } });
 
@@ -40,7 +43,7 @@ describe('rss: ayrıştırma', () => {
     const feed = parseFeed(parseXml(RSS));
     expect(feed.title).toBe('Örnek Blog');
     expect(feed.entries).toHaveLength(9);
-    expect(feed.entries.slice(0, 4)).toEqual([
+    expect(withoutContent(feed.entries.slice(0, 4))).toEqual([
       { id: 'post-7', title: 'Yedinci yazı', link: 'https://blog.example.com/7', date: Date.parse('2026-06-07T09:00:00Z') },
       { id: 'https://blog.example.com/6', title: 'Altıncı & son değil', link: 'https://blog.example.com/6', date: Date.parse('2026-06-06T09:00:00Z') },
       // guid yoksa link kimlik olur
@@ -54,7 +57,7 @@ describe('rss: ayrıştırma', () => {
   it('Atom girişlerinde alternate bağlantıyı, published ve link yedeklerini kullanır', () => {
     const feed = parseFeed(parseXml(ATOM));
     expect(feed.title).toBe('Atom Günlüğü');
-    expect(feed.entries).toEqual([
+    expect(withoutContent(feed.entries)).toEqual([
       { id: 'tag:example.com,2026:1', title: 'Birinci giriş', link: 'https://atom.example.com/1', date: Date.parse('2026-06-02T09:00:00Z') },
       { id: 'tag:example.com,2026:2', title: 'İkinci giriş', link: 'https://atom.example.com/2', date: Date.parse('2026-06-03T09:00:00Z') },
       { id: 'https://atom.example.com/3', title: 'Üçüncü: id yok', link: 'https://atom.example.com/3', date: Date.parse('2026-06-01T09:00:00Z') }
@@ -63,11 +66,43 @@ describe('rss: ayrıştırma', () => {
 
   it('tek girişli ve boş akışları da okur', () => {
     const single = parseFeed(parseXml('<rss><channel><title>T</title><item><guid>1</guid><title>Tek</title></item></channel></rss>'));
-    expect(single.entries).toEqual([{ id: '1', title: 'Tek', link: '', date: null }]);
+    expect(withoutContent(single.entries)).toEqual([{ id: '1', title: 'Tek', link: '', date: null }]);
 
     expect(parseFeed(parseXml('<rss><channel><title>Boş</title></channel></rss>')).entries).toEqual([]);
     expect(parseFeed(parseXml('<feed xmlns="http://www.w3.org/2005/Atom"><title>Boş</title></feed>')).entries).toEqual([]);
     expect(parseFeed(parseXml('<rss><channel><item><link>https://x/1</link></item></channel></rss>'), '(başlıksız)').entries[0].title).toBe('(başlıksız)');
+  });
+
+  it('tam metni content:encoded, yoksa description alanından alır', () => {
+    const feed = parseFeed(parseXml(`<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel>
+      <item><guid>1</guid><title>A</title><description>Kısa özet</description>
+        <content:encoded><![CDATA[<p>Uzun <b>metin</b></p>]]></content:encoded></item>
+      <item><guid>2</guid><title>B</title><description>&lt;p&gt;Yalnızca açıklama&lt;/p&gt;</description></item>
+      <item><guid>3</guid><title>C</title></item>
+    </channel></rss>`));
+    expect(feed.entries.map((e) => e.content)).toEqual([
+      { format: 'html', body: '<p>Uzun <b>metin</b></p>' },
+      { format: 'html', body: '<p>Yalnızca açıklama</p>' },
+      { format: 'html', body: '' }
+    ]);
+  });
+
+  it('Atom içeriğinin türünü korur, yoksa summary kullanır', () => {
+    const feed = parseFeed(parseXml(`<feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><id>1</id><title>A</title><content type="html">&lt;p&gt;HTML&lt;/p&gt;</content></entry>
+      <entry><id>2</id><title>B</title><content type="text">Düz metin</content></entry>
+      <entry><id>3</id><title>C</title><summary>Özet</summary></entry>
+    </feed>`));
+    expect(feed.entries.map((e) => e.content)).toEqual([
+      { format: 'html', body: '<p>HTML</p>' },
+      { format: 'text', body: 'Düz metin' },
+      { format: 'html', body: 'Özet' }
+    ]);
+  });
+
+  it('çift kaçışlı başlıkları çözer', () => {
+    const feed = parseFeed(parseXml('<rss><channel><item><guid>1</guid><title>Apple&amp;#8217;s &amp;amp; Google&amp;#x2019;s plan</title></item></channel></rss>'));
+    expect(feed.entries[0].title).toBe('Apple’s & Google’s plan');
   });
 
   it('RSS veya Atom olmayan belgede null döner', () => {
@@ -161,6 +196,17 @@ describe('rss: ilk çalıştırma ve yeni girişler', () => {
     ctx.fetch.mockResolvedValueOnce(xml(RSS));
     await run();
     expect(notifications.list()).toEqual([]);
+  });
+
+  it('özet ve tam metni bildirimle birlikte kaydeder', async () => {
+    const { ctx, notifications, run } = setup();
+    ctx.fetch.mockResolvedValueOnce(xml(`<rss><channel><title>T</title>
+      <item><guid>1</guid><title>A</title><description>&lt;p&gt;Merhaba &lt;b&gt;dünya&lt;/b&gt;&lt;/p&gt;</description></item>
+    </channel></rss>`));
+    await run();
+    const [n] = notifications.list();
+    expect(n.meta.excerpt).toBe('Merhaba dünya');
+    expect(notifications.content(n.id)).toEqual({ format: 'html', body: '<p>Merhaba <b>dünya</b></p>' });
   });
 
   it('görünen ad verilmişse gövdede onu kullanır', async () => {

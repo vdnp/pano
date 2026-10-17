@@ -200,3 +200,34 @@ describe('github eklentisi', () => {
     expect(err.i18n).toEqual({ key: "github:errors.rateLimited", params: { at: reset * 1000 } });
   });
 });
+
+describe("github komutu: bildirimi GitHub'da okundu say", () => {
+  const command = github.commands.markThreadRead;
+  const signal = new AbortController().signal;
+
+  it('PATCH /notifications/threads/{id} gönderir; 205 başarı', async () => {
+    const ctx = fakeCtx({ responses: [new Response(null, { status: 205 })] });
+    expect(await command.run(ctx, { threadId: '100' }, { signal })).toEqual({ message: "Bildirim GitHub'da okundu sayıldı." });
+    const [url, options] = ctx.fetch.mock.calls[0];
+    expect(url).toBe('https://api.github.com/notifications/threads/100');
+    expect(options).toMatchObject({ method: 'PATCH', signal, headers: { Authorization: 'Bearer tok' } });
+  });
+
+  it('anahtar yok, geçersiz kimlik, 404 ve 401 için anlaşılır hata', async () => {
+    await expect(command.run(fakeCtx({ token: null }), { threadId: '1' }, { signal })).rejects.toThrow('Erişim anahtarı eklenmedi');
+    const bad = fakeCtx();
+    await expect(command.run(bad, { threadId: '../user' }, { signal })).rejects.toThrow("GitHub'da bulunamadı");
+    expect(bad.fetch).not.toHaveBeenCalled();
+    await expect(command.run(fakeCtx({ responses: [new Response(null, { status: 404 })] }), { threadId: '1' }, { signal }))
+      .rejects.toThrow("GitHub'da bulunamadı");
+    await expect(command.run(fakeCtx({ responses: [new Response(null, { status: 401 })] }), { threadId: '1' }, { signal }))
+      .rejects.toThrow('geçersiz');
+  });
+
+  it("bildirim satırı eylemi: kimliği meta.threadId'den alır, paletten gizlidir", () => {
+    expect(command.palette).toBe(false);
+    expect(command.notificationAction.markRead).toBe(true);
+    expect(command.notificationAction.params({ meta: { threadId: 100 } })).toEqual({ threadId: '100' });
+    expect(command.notificationAction.params({ meta: {} })).toBeNull();
+  });
+});
