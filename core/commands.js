@@ -9,7 +9,9 @@ export const MAX_HISTORY = 200;
 export const MAX_DEPTH = 3;
 const COMMAND_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 const PROGRESS_INTERVAL_MS = 100;
-const ORIGINS = new Set(['palette', 'history', 'notification', 'plugin', 'tray']);
+// Bitmiş çalıştırmanın zinciri bu süre daha tutulur (geç gelen bildirim; ayrı süreçte RPC gecikmesi)
+const CAUSE_TTL_MS = 60_000;
+const ORIGINS = new Set(['palette', 'history', 'notification', 'plugin', 'tray', 'automation']);
 
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const providerOf = (s) => (typeof s?.suggest === 'string' ? s.suggest : s?.suggest?.provider) || null;
@@ -81,7 +83,20 @@ export function resolveCommandDefs(module, settings, ctx, logger, name) {
 // getEntries(): Map<'eklenti/komut', { id, plugin, name, def, ctx }>; ctx.forCommand({ signal, depth })
 export function createCommandRunner({ bus, storage, logger, getI18n, getEntries, now = () => Date.now() }) {
   const active = new Map();
+  // runId → { chain, until }: çalıştırmayı doğuran otomasyon kuralları. Bildirim causedBy ile gelir,
+  // otomasyon zinciri buradan okur (süreçler arası taşınabilir; örtük bağlama dayanmaz).
+  const causes = new Map();
   let seq = 0;
+
+  function chainOf(runId) {
+    const cause = runId ? causes.get(String(runId)) : null;
+    return cause && cause.until > now() ? cause.chain : [];
+  }
+
+  function pruneCauses() {
+    const t = now();
+    for (const [id, cause] of causes) if (cause.until <= t) causes.delete(id);
+  }
 
   const error = (key, params) => getI18n().error(key, params);
   // Katalog anahtarı ya da düz metin (eklentinin kendi kataloğunda: steam:commands.x)
@@ -126,15 +141,52 @@ export function createCommandRunner({ bus, storage, logger, getI18n, getEntries,
     }
   }
 
+  // Çalıştırmadan doğrulama (otomasyonun "Dene"si): temizlenmiş parametreler ve onay gereksinimi
+  function check(id, raw = {}) {
+    const entry = lookup(id);
+    return { params: validate(entry, raw), confirm: Boolean(entry.def.confirm) };
+  }
+
+  function infoFor(entry, params, origin, originLabel) {
+    return {
+      runId: `${now().toString(36)}-${++seq}`,
+      command: entry.id,
+      plugin: entry.plugin,
+      title: text(entry.def.title, 200) || entry.name,
+      params: redactParams(entry.def.params, params),
+      origin: ORIGINS.has(origin) ? origin : 'palette',
+      // Kaynağın açıklaması: otomasyonda kural adı ("Otomasyon: Sabah kontrolü")
+      originLabel: text(originLabel, 120) || null,
+      startedAt: now()
+    };
+  }
+
+  // Çalışmayan komutun da geçmişte izi kalsın (ör. otomasyonun onay isteği reddedildi ya da
+  // süresi doldu): status cancelled, mesaj nedenini söyler
+  function skip(id, params, { origin = 'automation', originLabel, message, error, errorI18n } = {}) {
+    const entry = lookup(id);
+    const info = infoFor(entry, params, origin, originLabel);
+    const outcome = error ? { status: 'error', error, errorI18n: errorI18n ?? null } : { status: 'cancelled', message: text(message, 500) };
+    record(info, outcome);
+    bus.emit('command:finished', { ...info, ...outcome, duration: 0, skipped: true });
+  }
+
   // Çalıştırmayı başlatır, hemen { runId, done } döner. done: { status: ok|error|cancelled, message?, error?, errorI18n? }
-  function start(id, raw = {}, { origin = 'palette', depth = 0, signal: parentSignal, caller = null } = {}) {
+  // chain: otomasyonun açıkça verdiği kural zinciri; causedBy: bu çalıştırmayı başlatan çalıştırma
+  // (ctx.runCommand) — zinciri ondan devralır
+  function start(id, raw = {}, {
+    origin = 'palette', originLabel = null, depth = 0, signal: parentSignal, caller = null, chain = null, causedBy = null
+  } = {}) {
     const entry = lookup(id);
     if (depth > MAX_DEPTH) throw error('core.commands.tooDeep', { id: entry.id });
     // Kullanıcı onayı gereken komutu başka bir eklenti çalıştıramaz (onay atlanmasın)
     if (caller && entry.def.confirm) throw error('core.commands.needsConfirm', { id: entry.id });
     const params = validate(entry, raw);
 
-    const runId = `${now().toString(36)}-${++seq}`;
+    const info = infoFor(entry, params, origin, originLabel);
+    const { runId } = info;
+    pruneCauses();
+    causes.set(runId, { chain: Array.isArray(chain) ? chain : chainOf(causedBy), until: Infinity });
     const controller = new AbortController();
     const { signal } = controller;
     if (parentSignal) {
@@ -142,15 +194,6 @@ export function createCommandRunner({ bus, storage, logger, getI18n, getEntries,
       else parentSignal.addEventListener('abort', () => controller.abort(), { once: true });
     }
 
-    const info = {
-      runId,
-      command: entry.id,
-      plugin: entry.plugin,
-      title: text(entry.def.title, 200) || entry.name,
-      params: redactParams(entry.def.params, params),
-      origin: ORIGINS.has(origin) ? origin : 'palette',
-      startedAt: now()
-    };
     active.set(runId, { ...info, controller, progress: null, message: '' });
     bus.emit('command:started', info);
 
@@ -168,8 +211,8 @@ export function createCommandRunner({ bus, storage, logger, getI18n, getEntries,
       bus.emit('command:progress', { runId, progress: run.progress, message: run.message });
     }
 
-    const ctx = entry.ctx.forCommand({ signal, depth });
-    const work = Promise.resolve().then(() => entry.def.run(ctx, params, { signal, progress }));
+    const ctx = entry.ctx.forCommand({ signal, depth, runId });
+    const work = Promise.resolve().then(() => entry.def.run(ctx, params, { signal, progress, runId, depth }));
     // İptalden sonra gelen sonuç ya da hata yok sayılır (yakalanmamış hata olmasın)
     work.catch(() => {});
     const aborted = new Promise((resolve) => {
@@ -191,6 +234,8 @@ export function createCommandRunner({ bus, storage, logger, getI18n, getEntries,
         if (outcome.status === 'error') logger.warn(`[${entry.id}]`, outcome.error);
       }
       active.delete(runId);
+      const cause = causes.get(runId);
+      if (cause) cause.until = now() + CAUSE_TTL_MS;
       record(info, outcome);
       bus.emit('command:finished', { ...info, ...outcome, duration: Math.max(0, now() - info.startedAt) });
       return outcome;
@@ -220,7 +265,10 @@ export function createCommandRunner({ bus, storage, logger, getI18n, getEntries,
     list,
     lookup,
     describe,
+    check,
+    skip,
     start,
+    chainOf,
     runAndWait,
     cancel,
     running,

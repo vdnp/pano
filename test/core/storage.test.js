@@ -222,7 +222,7 @@ describe('sqlite deposu', () => {
     expect(second.kv.get('state')).toEqual({ github: { etag: 'x' } });
     expect(second.notifications.list()).toEqual([{
       id: 'github:1', source: 'github', title: 'T', body: '', url: null, level: 'info',
-      tags: ['a'], createdAt: 10, receivedAt: 11, read: true, meta: { k: 1 }, job: null
+      tags: ['a'], createdAt: 10, receivedAt: 11, read: true, meta: { k: 1 }, job: null, pinned: false
     }]);
     second.close();
   });
@@ -264,8 +264,8 @@ describe('pano.json içe aktarma', () => {
     // Okundu bilgisi ve alınma zamanı korunur; id'siz kayıt atlanır
     // Eski Türkçe etiketler çeviri anahtarına dönüşür
     expect(storage.notifications.list()).toEqual([
-      { ...LEGACY.notifications[0], tags: ['github:type.Issue'], job: 'notifications' },
-      { ...LEGACY.notifications[1], job: 'notifications' }
+      { ...LEGACY.notifications[0], tags: ['github:type.Issue'], job: 'notifications', pinned: false },
+      { ...LEGACY.notifications[1], job: 'notifications', pinned: false }
     ]);
 
     expect(fs.existsSync(jsonFile())).toBe(false);

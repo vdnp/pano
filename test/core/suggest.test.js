@@ -91,13 +91,13 @@ describe('öneri sağlayıcısı', () => {
   describe('list türünde zorunlu sayı ve boş satır', () => {
     const games = () => core.sources.list()[0].settings.games;
 
-    it('yalnızca sayısı dolu satırı tutar', () => {
-      core.sources.updateSettings('oyun', { games: [{ appId: 570, name: '' }] });
+    it('yalnızca sayısı dolu satırı tutar', async () => {
+      await core.sources.updateSettings('oyun', { games: [{ appId: 570, name: '' }] });
       expect(games()).toEqual([{ appId: 570, name: '' }]);
     });
 
-    it('zorunlu sayı boş ya da sayı değilse satırı atar', () => {
-      core.sources.updateSettings('oyun', {
+    it('zorunlu sayı boş ya da sayı değilse satırı atar', async () => {
+      await core.sources.updateSettings('oyun', {
         games: [{ appId: '', name: 'Adsız' }, { appId: 'abc', name: 'Harf' }, { appId: '730', name: 'CS2' }, { appId: null, name: '' }]
       });
       expect(games()).toEqual([{ appId: 730, name: 'CS2' }]);

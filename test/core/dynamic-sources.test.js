@@ -62,13 +62,13 @@ describe('ayarlara göre değişen kaynaklar', () => {
       expect(plugin().settings.feeds).toEqual([]);
     });
 
-    it('dizi olmayan değeri boş listeye çevirir', () => {
-      setFeeds('https://a');
+    it('dizi olmayan değeri boş listeye çevirir', async () => {
+      await setFeeds('https://a');
       expect(plugin().settings.feeds).toEqual([]);
     });
 
-    it('alanları alt şemaya göre temizler, boş ve zorunlu alanı boş satırları atar', () => {
-      setFeeds([
+    it('alanları alt şemaya göre temizler, boş ve zorunlu alanı boş satırları atar', async () => {
+      await setFeeds([
         { url: '  https://a  ', name: 'A', weight: '50', muted: 1, fazla: 'x' },
         { url: '', name: '' },
         { url: '', name: 'Adressiz' },
@@ -82,8 +82,8 @@ describe('ayarlara göre değişen kaynaklar', () => {
       ]);
     });
 
-    it('en fazla 50 öğe tutar', () => {
-      setFeeds(Array.from({ length: 51 }, (_, i) => ({ url: `https://f${i}` })));
+    it('en fazla 50 öğe tutar', async () => {
+      await setFeeds(Array.from({ length: 51 }, (_, i) => ({ url: `https://f${i}` })));
       expect(plugin().settings.feeds).toHaveLength(50);
       expect(plugin().settings.feeds.at(-1).url).toBe('https://f49');
     });
@@ -105,11 +105,11 @@ describe('ayarlara göre değişen kaynaklar', () => {
     removeDir(other);
   });
 
-  it('ayar değişince işleri ekler ve siler', () => {
-    setFeeds([{ url: 'https://a', name: 'A' }, { url: 'https://b', name: 'B' }]);
+  it('ayar değişince işleri ekler ve siler', async () => {
+    await setFeeds([{ url: 'https://a', name: 'A' }, { url: 'https://b', name: 'B' }]);
     expect(jobs()).toEqual([{ key: 'dyn/httpsa', title: 'A' }, { key: 'dyn/httpsb', title: 'B' }]);
 
-    setFeeds([{ url: 'https://b', name: 'B' }, { url: 'https://c' }]);
+    await setFeeds([{ url: 'https://b', name: 'B' }, { url: 'https://c' }]);
     expect(jobs()).toEqual([{ key: 'dyn/httpsb', title: 'B' }, { key: 'dyn/httpsc', title: 'https://c' }]);
 
     // Silinen iş artık çalıştırılamaz
@@ -118,11 +118,11 @@ describe('ayarlara göre değişen kaynaklar', () => {
   });
 
   it('ad değişince işi yeniden kurmaz, yalnızca başlığı günceller', async () => {
-    setFeeds([{ url: 'https://a', name: 'Eski' }]);
+    await setFeeds([{ url: 'https://a', name: 'Eski' }]);
     await core.sources.runNow('dyn/httpsa');
     const before = plugin().jobs[0];
 
-    setFeeds([{ url: 'https://a', name: 'Yeni' }]);
+    await setFeeds([{ url: 'https://a', name: 'Yeni' }]);
     const after = plugin().jobs[0];
     expect(after.title).toBe('Yeni');
     expect(after.lastSuccess).toBe(before.lastSuccess);
@@ -130,14 +130,14 @@ describe('ayarlara göre değişen kaynaklar', () => {
   });
 
   it('çalışan iş en güncel tanımı kullanır', async () => {
-    setFeeds([{ url: 'https://a', name: 'A' }]);
+    await setFeeds([{ url: 'https://a', name: 'A' }]);
     await core.sources.runNow('dyn/httpsa');
     expect(globalThis.__dynRuns).toEqual(['https://a']);
   });
 
-  it('aralık değişince tüm işleri yeniden zamanlar', () => {
-    setFeeds([{ url: 'https://a' }, { url: 'https://b' }]);
-    core.sources.updateSettings('dyn', { interval: 15 });
+  it('aralık değişince tüm işleri yeniden zamanlar', async () => {
+    await setFeeds([{ url: 'https://a' }, { url: 'https://b' }]);
+    await core.sources.updateSettings('dyn', { interval: 15 });
     expect(plugin().jobs.map((j) => j.intervalMs)).toEqual([15 * 60_000, 15 * 60_000]);
   });
 
@@ -155,7 +155,7 @@ describe('ayarlara göre değişen kaynaklar', () => {
     expect(item.startError).toBe("Eklenti başlatılamadı: yapılandırma dosyası yok. Sorunu giderip Pano'yu yeniden başlat.");
     expect(item.jobs).toEqual([]);
 
-    broken.sources.updateSettings('bozuk', { x: 2 });
+    await broken.sources.updateSettings('bozuk', { x: 2 });
     expect(broken.sources.list()[0].jobs).toEqual([]);
     expect(plugin().startError).toBeNull(); // sağlam eklentide alan boş
     await broken.stop();
@@ -218,9 +218,9 @@ describe('ayarlara göre değişen kaynaklar', () => {
     removeDir(other);
   });
 
-  it('kaynak fonksiyonu hata verirse loglar ve iş bırakmaz', () => {
-    setFeeds([{ url: 'https://a' }]);
-    setFeeds([{ url: 'patlat' }]);
+  it('kaynak fonksiyonu hata verirse loglar ve iş bırakmaz', async () => {
+    await setFeeds([{ url: 'https://a' }]);
+    await setFeeds([{ url: 'patlat' }]);
     expect(jobs()).toEqual([]);
     expect(logger.error).toHaveBeenCalledWith('[dyn] kaynak listesi hesaplanamadı:', 'hesaplanamadı');
   });

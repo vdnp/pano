@@ -2,6 +2,8 @@
 // kullanılır: bir çalışma bitmeden diğeri başlamaz, sonraki zaman doğru hesaplanır.
 export function createScheduler({ bus, logger }) {
   const jobs = new Map();
+  // Süren çalışmalar: kapanışta beklenir ki iş kapanmış depoya yazmasın
+  const inflight = new Set();
 
   const snapshot = (job) => ({ key: job.key, ...job.meta, intervalMs: job.intervalMs, ...job.status });
   const emit = (job) => bus.emit('source:status', snapshot(job));
@@ -9,10 +11,18 @@ export function createScheduler({ bus, logger }) {
   function plan(job, delay) {
     clearTimeout(job.timer);
     job.status.nextRun = Date.now() + delay;
+    // Zamanlanmış çalışmanın nedeni yoktur; yalnızca runNow'a verilen neden o çalışmaya geçer
     job.timer = setTimeout(() => execute(job), delay);
   }
 
-  async function execute(job) {
+  function execute(job, cause) {
+    const run = executeJob(job, cause);
+    inflight.add(run);
+    run.finally(() => inflight.delete(run));
+    return run;
+  }
+
+  async function executeJob(job, cause = null) {
     if (job.running || job.stopped) return;
     clearTimeout(job.timer);
     job.running = true;
@@ -20,7 +30,7 @@ export function createScheduler({ bus, logger }) {
     emit(job);
 
     try {
-      await job.fn();
+      await job.fn(cause);
       job.status.state = 'ok';
       job.status.error = null;
       job.status.errorI18n = null;
@@ -76,9 +86,21 @@ export function createScheduler({ bus, logger }) {
       jobs.delete(key);
     },
 
-    runNow: (key) => (jobs.has(key) ? execute(jobs.get(key)) : undefined),
+    // cause: { causedBy } — çalıştırmayı başlatan komut (bildirimler bu nedeni taşır)
+    runNow: (key, cause = null) => (jobs.has(key) ? execute(jobs.get(key), cause) : undefined),
 
     statuses: () => [...jobs.values()].map(snapshot),
+
+    // Süren çalışmaların bitmesini en fazla ms kadar bekler; true: hepsi bitti
+    async drain(ms) {
+      if (inflight.size === 0) return true;
+      let timer;
+      const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(false), ms); });
+      const all = Promise.allSettled([...inflight]).then(() => true);
+      const done = await Promise.race([all, timeout]);
+      clearTimeout(timer);
+      return done;
+    },
 
     stopAll() {
       for (const job of jobs.values()) {

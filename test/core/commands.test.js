@@ -173,9 +173,9 @@ describe('komutlar: core üzerinden', () => {
       expect(JSON.parse(JSON.stringify(list))).toEqual(list);
     });
 
-    it('ayara bağlı komut listesi ayar değişince güncellenir', () => {
+    it('ayara bağlı komut listesi ayar değişince güncellenir', async () => {
       expect(core.commands.list().some((c) => c.id === 'arac/extra')).toBe(false);
-      core.sources.updateSettings('arac', { extra: true });
+      await core.sources.updateSettings('arac', { extra: true });
       expect(core.commands.list().some((c) => c.id === 'arac/extra')).toBe(true);
     });
 
@@ -307,11 +307,11 @@ describe('komutlar: core üzerinden', () => {
     });
 
     it('bildirimden parametre çıkarır, başarıda bildirimi okundu yapar; uygulanamazsa hata', async () => {
-      const runId = core.commands.runForNotification('arac/act', 'arac:n1');
+      const runId = await core.commands.runForNotification('arac/act', 'arac:n1');
       expect(await finished(core, runId)).toMatchObject({ status: 'ok', message: 'tid 77', origin: 'notification' });
       await vi.waitFor(() => expect(core.notifications.list().find((n) => n.id === 'arac:n1').read).toBe(true));
-      expect(() => core.commands.runForNotification('arac/act', 'arac:n2')).toThrow('Bu eylem bu bildirime uygulanamıyor.');
-      expect(() => core.commands.runForNotification('arac/act', 'yok')).toThrow('uygulanamıyor');
+      await expect(core.commands.runForNotification('arac/act', 'arac:n2')).rejects.toThrow('Bu eylem bu bildirime uygulanamıyor.');
+      await expect(core.commands.runForNotification('arac/act', 'yok')).rejects.toThrow('uygulanamıyor');
     });
   });
 });

@@ -5,7 +5,9 @@ import { createSecrets } from './secrets.js';
 import { createScheduler } from './scheduler.js';
 import { loadPlugins } from './loader.js';
 import { createContext, PERMISSIONS } from './context.js';
-import { cleanSuggestion, createCommandRunner, resolveCommandDefs } from './commands.js';
+import { cleanSuggestion, createCommandRunner } from './commands.js';
+import { createInProcessHost } from './plugin-host.js';
+import { createAutomation } from './automation/index.js';
 import { createWebFetcher } from './web.js';
 import { createProviderCache } from './providers.js';
 import { isWidgetView, sanitizeView } from './widgets.js';
@@ -14,6 +16,9 @@ import { createI18n, mergeCatalogs, LOCALES } from '../shared/i18n.js';
 import { appCatalogs } from '../locales/index.js';
 
 const MAX_SUGGESTIONS = 20;
+// Başlatılamamış ya da henüz hazır olmayan eklentinin katkısı yoktur
+const EMPTY_INFO = { kinds: { sources: false, widgets: false, commands: false }, hasSetup: false, hasTeardown: false, hasContent: false, providers: {}, suggest: [] };
+const EMPTY_DESC = { sources: {}, widgets: {}, commands: {} };
 
 /**
  * Pano çekirdeği. Electron'dan bağımsızdır; Electron, CLI veya bir WebSocket
@@ -61,10 +66,16 @@ export function createCore({
   // Komutlar: eklentilerin commands alanı + uygulamanın kendi komutları (pano/…)
   const commands = createCommandRunner({ bus, storage, logger, getI18n: () => i18n, getEntries: commandEntries });
 
-  function setLocale(next) {
+  // Otomasyon: bildirim/zaman/açılış tetikleyicileri → koşullar → komutlar
+  const automation = createAutomation({ bus, store, commands, notifications, getI18n: () => i18n, logger });
+
+  // Kaynak ve kart başlıkları eklentide ctx.t ile üretildiği için açıklamalar yeni dilde yeniden alınır
+  async function setLocale(next) {
     if (!LOCALES.includes(next) || next === locale) return;
     locale = next;
     rebuildI18n();
+    await Promise.all([...plugins.values()].map((plugin) => refresh(plugin)));
+    bus.emit('sources:changed');
   }
 
   function settingsFor(name) {
@@ -87,32 +98,34 @@ export function createCore({
     return plugin;
   }
 
-  // sources bir nesne ya da ayarlardan kaynak listesi hesaplayan bir fonksiyon olabilir
-  // (ör. RSS'te her akış ayrı bir kaynak).
-  function resolveSources(plugin) {
-    // setup'ı başarısız olan eklentinin işleri kurulmaz (ayar kaydı da kurmasın)
-    if (plugin.startError) return {};
-    const { sources } = plugin.module;
-    if (typeof sources !== 'function') return sources ?? {};
-    try {
-      // ctx ikinci argüman: kaynak başlıklarını uygulama dilinde üretebilsin (ctx.t)
-      return sources(settingsFor(plugin.manifest.name), plugin.ctx) ?? {};
-    } catch (err) {
-      logger.error(`[${plugin.manifest.name}] kaynak listesi hesaplanamadı:`, err.message);
-      return {};
-    }
+  // Eklentinin ayara bağlı katkıları (kaynaklar, kartlar, komutlar) host'tan düz açıklama olarak
+  // alınır ve burada önbelleğe konur; listeler eklenti kodunu çağırmadan bundan okunur. Yenileme
+  // başlangıçta, ayar kaydında ve dil değişiminde yapılır; aynı eklenti için sırayla çalışır.
+  function refresh(plugin) {
+    plugin.refreshing = (plugin.refreshing ?? Promise.resolve()).then(async () => {
+      if (!plugin.ready) return;
+      try {
+        plugin.desc = await plugin.host.describe(settingsFor(plugin.manifest.name));
+      } catch (err) {
+        logger.error(`[${plugin.manifest.name}] katkılar okunamadı:`, err?.message ?? err);
+        plugin.desc = EMPTY_DESC;
+      }
+      commandsCache = null;
+      syncSources(plugin);
+    });
+    return plugin.refreshing;
   }
 
   // Zamanlayıcıdaki işleri eklentinin güncel kaynak listesiyle eşler: yeni kaynak
   // eklenir, kalkan silinir, kalanın başlığı/aralığı yerinde güncellenir.
   function syncSources(plugin) {
     const name = plugin.manifest.name;
-    plugin.sources = resolveSources(plugin);
+    const sources = plugin.desc?.sources ?? {};
     const existing = new Map(
       scheduler.statuses().filter((s) => s.plugin === name).map((s) => [s.key, s])
     );
 
-    for (const [sourceId, source] of Object.entries(plugin.sources)) {
+    for (const [sourceId, source] of Object.entries(sources)) {
       const key = `${name}/${sourceId}`;
       const meta = { plugin: name, source: sourceId, title: source.title ?? sourceId };
       const intervalMs = intervalFor(name, source);
@@ -120,9 +133,9 @@ export function createCore({
       existing.delete(key);
 
       if (!current) {
-        // Tanım her çalışmada yeniden okunur; ad değişince iş yeniden kurulmaz
-        // İşe özel ctx: bildirimler bu işin kimliğiyle (job) kaydedilir
-        scheduler.add(key, () => plugin.sources[sourceId].run(plugin.ctx.forJob(sourceId)), intervalMs, meta);
+        // Tanım her çalışmada host'taki güncel haliyle çalışır; ad değişince iş yeniden kurulmaz.
+        // Bildirimler bu işin kimliğiyle (job) ve varsa nedeniyle (causedBy) kaydedilir.
+        scheduler.add(key, (cause) => plugin.host.invoke('source.run', sourceId, { job: sourceId, causedBy: cause?.causedBy ?? null }), intervalMs, meta);
       } else {
         scheduler.setMeta(key, meta);
         if (current.intervalMs !== intervalMs) scheduler.reschedule(key, intervalMs);
@@ -140,16 +153,21 @@ export function createCore({
       const declared = Array.isArray(plugin.manifest.permissions) ? plugin.manifest.permissions : [];
       for (const p of declared) if (!PERMISSIONS.includes(p)) logger.warn(`[${name}] bilinmeyen izin yok sayıldı: ${p}`);
       plugin.permissions = declared.filter((p) => PERMISSIONS.includes(p));
-      plugin.ctx = createContext(name, {
+      const ctx = createContext(name, {
         notifications, store, secrets, logger,
         getSettings: () => settingsFor(name),
         getI18n: () => i18n,
         permissions: plugin.permissions,
         capabilities
       });
+      // Eklentiye yalnızca host üzerinden ulaşılır (aşama A'da ayrı süreçteki eklenti için RPC)
+      plugin.host = createInProcessHost({ name, module: plugin.module, ctx, logger });
+      plugin.info = EMPTY_INFO;
+      plugin.desc = EMPTY_DESC;
 
       try {
-        await plugin.module.setup?.(plugin.ctx);
+        plugin.info = await plugin.host.inspect();
+        if (plugin.info.hasSetup) await plugin.host.invoke('setup');
       } catch (err) {
         logger.error(`[${name}] başlatılamadı:`, err.message);
         // Arayüz "kaynak eklenmedi" yerine asıl sorunu gösterebilsin
@@ -157,30 +175,38 @@ export function createCore({
         continue;
       }
 
-      // Katkı modeli: şimdilik sadece "sources". İleride commands, providers, widgets.
-      syncSources(plugin);
+      // setup bitmeden katkıları çağrılmaz
+      plugin.ready = true;
+      await refresh(plugin);
     }
     bus.emit('sources:changed');
+    // Eklentiler ve komutları yüklendikten sonra (kurallar onların komutlarını çağırır)
+    automation.start();
   }
 
-  async function stop() {
+  // Kapanış: yeni çalışma başlamaz, sürenler kısa süre beklenir, sonra depo kapanır.
+  // Çekirdeği kullanan taraf bu sözü beklemeli (Electron'da before-quit).
+  async function stop({ drainMs = 3000 } = {}) {
+    automation.stop();
     scheduler.stopAll();
+    if (!(await scheduler.drain(drainMs))) logger.warn('Kapanışta süren kaynak işleri beklenmeden kapatıldı');
     for (const plugin of plugins.values()) {
-      try { await plugin.module.teardown?.(plugin.ctx); } catch { /* kapanışta yut */ }
+      if (!plugin.ready || !plugin.info.hasTeardown) continue;
+      try { await plugin.host.invoke('teardown'); } catch { /* kapanışta yut */ }
     }
     storage.close();
   }
 
   function listSources() {
     const statuses = scheduler.statuses();
-    return [...plugins.values()].map(({ manifest, startError, locales, module, permissions }) => ({
+    return [...plugins.values()].map(({ manifest, startError, locales, info, permissions }) => ({
       name: manifest.name,
       // Metin core'un dilinde; arayüz dil değişince anahtardan yeniden çevirir
       startError: startError ? i18n.t(startError) : null,
       startErrorI18n: startError ?? null,
       locales: locales ?? {},
       // Eklentinin sunduğu katkı türleri: yalnızca kart sunan eklenti "kaynak eklenmedi" sayılmaz
-      kinds: { sources: Boolean(module?.sources), widgets: Boolean(module?.widgets), commands: Boolean(module?.commands) },
+      kinds: { ...(info ?? EMPTY_INFO).kinds },
       // Ayarlar panelinde okunur şekilde gösterilir
       permissions: permissions ?? [],
       displayName: manifest.displayName ?? manifest.name,
@@ -197,7 +223,7 @@ export function createCore({
     }));
   }
 
-  function updateSettings(name, values) {
+  async function updateSettings(name, values) {
     const plugin = getPlugin(name);
     const clean = {};
     for (const [key, schema] of Object.entries(plugin.manifest.settings ?? {})) {
@@ -206,7 +232,7 @@ export function createCore({
     const all = store.get('settings') ?? {};
     store.set('settings', { ...all, [name]: { ...(all[name] ?? {}), ...clean } });
 
-    syncSources(plugin);
+    await refresh(plugin);
     bus.emit('sources:changed');
   }
 
@@ -218,14 +244,13 @@ export function createCore({
     const plugin = getPlugin(name);
     const field = Object.values(plugin.manifest.settings ?? {})
       .find((s) => s.type === 'list' && s.suggest?.provider === provider);
-    const fn = plugin.module.suggest?.[provider];
-    if (!field || typeof fn !== 'function') throw i18n.error('core.errors.unknownProvider', { provider });
     if (plugin.startError) throw i18n.error(plugin.startError.key, plugin.startError.params);
+    if (!field || !plugin.info.suggest.includes(provider)) throw i18n.error('core.errors.unknownProvider', { provider });
 
     const q = String(query ?? '').trim().slice(0, 100);
     if (q.length < 2) return [];
 
-    const results = await fn(plugin.ctx, q);
+    const results = await plugin.host.invoke('suggest', provider, { query: q });
     const out = [];
     for (const r of Array.isArray(results) ? results : []) {
       const [value] = coerceList([r?.value], field);
@@ -237,28 +262,12 @@ export function createCore({
     return out;
   }
 
-  // "Tam metni getir": önce bildirimi üreten eklentiye sorulur (katkı alanı content(ctx, bildirim);
-  // ör. Steam metni API'den alır, çünkü haber sayfası içeriği JavaScript ile yükler). Eklenti
-  // vermezse null döner ve okuyucu sayfayı indirip makaleyi kendisi çıkarır.
-  // widgets bir nesne ya da ayarlardan kart listesi hesaplayan fonksiyon olabilir (ör. her oyun için kart)
-  function resolveWidgets(plugin) {
-    if (plugin.startError) return {};
-    const { widgets } = plugin.module;
-    if (typeof widgets !== 'function') return widgets ?? {};
-    try {
-      return widgets(settingsFor(plugin.manifest.name), plugin.ctx) ?? {};
-    } catch (err) {
-      logger.error(`[${plugin.manifest.name}] kart listesi hesaplanamadı:`, err.message);
-      return {};
-    }
-  }
-
-  // Kart tanımları (arayüze yalnızca düz bilgi gider; map ve get core'da kalır)
+  // Kart tanımları: önbelleğe alınmış açıklamadan (eklenti kodu çağrılmaz; map ve get host'ta kalır)
   function listWidgets() {
     const out = [];
     for (const plugin of plugins.values()) {
       const name = plugin.manifest.name;
-      for (const [widget, def] of Object.entries(resolveWidgets(plugin))) {
+      for (const [widget, def] of Object.entries(plugin.desc?.widgets ?? {})) {
         out.push({
           id: `${name}/${widget}`,
           plugin: name,
@@ -279,26 +288,31 @@ export function createCore({
     const cut = String(id).indexOf('/');
     const plugin = plugins.get(String(id).slice(0, cut));
     const widget = String(id).slice(cut + 1);
-    const def = plugin && cut > 0 ? resolveWidgets(plugin)[widget] : null;
+    const def = plugin && cut > 0 && Object.hasOwn(plugin.desc?.widgets ?? {}, widget) ? plugin.desc.widgets[widget] : null;
     if (!def) throw i18n.error('core.widgets.notFound', { id: String(id) });
     if (!isWidgetView(def.view)) throw i18n.error('core.widgets.invalidView', { view: String(def.view) });
-    const provider = plugin.module.providers?.[def.provider];
-    if (typeof provider?.get !== 'function') {
+    const providerInfo = Object.hasOwn(plugin.info.providers, def.provider ?? '') ? plugin.info.providers[def.provider] : null;
+    if (!providerInfo) {
       throw i18n.error('core.widgets.unknownProvider', { provider: String(def.provider) });
     }
 
+    // Önbellek sağlayıcıyı bu sarmalayıcıyla çağırır (ttl açıklamadan)
+    const provider = {
+      ttl: providerInfo.ttl,
+      get: (_ctx, params) => plugin.host.invoke('provider.get', def.provider, { params })
+    };
     const result = await providerCache.get({
       plugin: plugin.manifest.name,
       id: def.provider,
       provider,
-      ctx: plugin.ctx,
+      ctx: null,
       params: def.params ?? {},
       force
     });
 
     let view;
     try {
-      const mapped = typeof def.map === 'function' ? await def.map(result.data, plugin.ctx) : result.data;
+      const mapped = def.hasMap ? await plugin.host.invoke('widget.map', widget, { data: result.data }) : result.data;
       view = sanitizeView(def.view, mapped);
     } catch (err) {
       logger.warn(`[${plugin.manifest.name}] kart verisi hazırlanamadı (${widget}):`, err?.message ?? err);
@@ -354,8 +368,8 @@ export function createCore({
   async function fetchContent(id) {
     const n = notifications.get(id);
     const plugin = n && plugins.get(n.source);
-    if (!plugin || plugin.startError || typeof plugin.module.content !== 'function') return null;
-    const content = await plugin.module.content(plugin.ctx, n);
+    if (!plugin?.ready || !plugin.info.hasContent) return null;
+    const content = await plugin.host.invoke('content', null, { notification: n });
     if (!content || !notifications.setContent(n.id, content)) return null;
     return notifications.content(n.id);
   }
@@ -368,7 +382,7 @@ export function createCore({
     bus.emit('sources:changed');
 
     // Anahtar değişince beklemeden kontrol et
-    for (const sourceId of Object.keys(plugin.sources ?? {})) {
+    for (const sourceId of Object.keys(plugin.desc?.sources ?? {})) {
       scheduler.runNow(`${name}/${sourceId}`);
     }
   }
@@ -397,11 +411,12 @@ export function createCore({
   const BUILTIN = {
     runAll: {
       title: 'core.commands.builtin.runAll',
-      async run(_ctx, _params, { progress }) {
+      async run(_ctx, _params, { progress, runId }) {
         const keys = scheduler.statuses().map((s) => s.key);
         let finished = 0;
         await Promise.all(keys.map(async (key) => {
-          await scheduler.runNow(key);
+          // Kaynakların bu çalıştırmada ürettiği bildirimler bu komuta bağlanır (otomasyon döngüsü)
+          await scheduler.runNow(key, { causedBy: runId });
           progress(++finished / keys.length);
         }));
         const failed = scheduler.statuses().filter((s) => keys.includes(s.key) && s.state === 'error').length;
@@ -415,23 +430,79 @@ export function createCore({
         notifications.markAllRead();
         return { message: i18n.t('core.commands.builtin.markAllReadDone') };
       }
+    },
+    // Otomasyonların yardımcı komutları (paletten de çalışır)
+    notify: {
+      title: 'core.commands.builtin.notify',
+      params: {
+        title: { type: 'string', label: 'core.commands.builtin.params.title', required: true },
+        body: { type: 'string', label: 'core.commands.builtin.params.body' },
+        level: { type: 'string', label: 'core.commands.builtin.params.level', default: 'info', placeholder: 'info | warning | error' }
+      },
+      async run(_ctx, { title, body, level }, { runId }) {
+        notifications.add({
+          id: `notify:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          source: 'pano', title, body, level
+        }, { causedBy: runId });
+        return { message: i18n.t('core.commands.builtin.notifyDone') };
+      }
+    },
+    // Sesli masaüstü uyarısı: gösterimi çekirdeği kullanan taraf yapar (Electron'da Notification)
+    alert: {
+      title: 'core.commands.builtin.alert',
+      params: {
+        title: { type: 'string', label: 'core.commands.builtin.params.title', required: true },
+        body: { type: 'string', label: 'core.commands.builtin.params.body' }
+      },
+      async run(_ctx, { title, body }) {
+        bus.emit('app:alert', { title, body: body ?? '' });
+        return { message: i18n.t('core.commands.builtin.alertDone') };
+      }
+    },
+    // Bildirim kimliği gerektirir; otomasyonda {{id}} ile kullanılır, paletten gizli
+    pin: {
+      title: 'core.commands.builtin.pin',
+      palette: false,
+      params: { id: { type: 'string', label: 'core.commands.builtin.params.id', required: true } },
+      async run(_ctx, { id }) {
+        if (!notifications.setPinned(id, true)) throw i18n.error('core.commands.builtin.notificationNotFound');
+        return { message: i18n.t('core.commands.builtin.pinDone') };
+      }
+    },
+    unpin: {
+      title: 'core.commands.builtin.unpin',
+      palette: false,
+      params: { id: { type: 'string', label: 'core.commands.builtin.params.id', required: true } },
+      async run(_ctx, { id }) {
+        if (!notifications.setPinned(id, false)) throw i18n.error('core.commands.builtin.notificationNotFound');
+        return { message: i18n.t('core.commands.builtin.unpinDone') };
+      }
     }
   };
 
-  // 'eklenti/komut' → { id, plugin, name, def, ctx }. Ayara bağlı komut listesi her istekte hesaplanır.
+  // 'eklenti/komut' → { id, plugin, name, def, ctx }. Eklenti komutlarının tanımı önbelleğe alınmış
+  // açıklamadan gelir (her aramada eklenti kodu çağrılmaz); run host'a gider. Açıklama yenilenince
+  // (ayar, dil) önbellek silinir.
+  let commandsCache = null;
   function commandEntries() {
+    if (commandsCache) return commandsCache;
     const out = new Map();
     for (const [name, def] of Object.entries(BUILTIN)) {
       out.set(`pano/${name}`, { id: `pano/${name}`, plugin: 'pano', name, def, ctx: builtinCtx });
     }
     for (const plugin of plugins.values()) {
-      if (plugin.startError || !plugin.module.commands) continue;
+      if (!plugin.ready) continue;
       const pluginName = plugin.manifest.name;
-      const defs = resolveCommandDefs(plugin.module, settingsFor(pluginName), plugin.ctx, logger, pluginName);
-      for (const [name, def] of Object.entries(defs)) {
-        out.set(`${pluginName}/${name}`, { id: `${pluginName}/${name}`, plugin: pluginName, name, def, ctx: plugin.ctx });
+      for (const [name, described] of Object.entries(plugin.desc?.commands ?? {})) {
+        const def = {
+          ...described,
+          run: (_ctx, params, { signal, progress, runId, depth }) =>
+            plugin.host.invoke('command.run', name, { params, runId, depth }, { signal, onProgress: progress })
+        };
+        out.set(`${pluginName}/${name}`, { id: `${pluginName}/${name}`, plugin: pluginName, name, def, ctx: builtinCtx, host: plugin.host });
       }
     }
+    commandsCache = out;
     return out;
   }
 
@@ -447,12 +518,14 @@ export function createCore({
     const s = schema[key];
     const provider = typeof s?.suggest === 'string' ? s.suggest : s?.suggest?.provider;
     const plugin = plugins.get(entry.plugin);
-    const fn = provider && plugin?.module.suggest?.[provider];
-    if (typeof fn !== 'function') throw i18n.error('core.errors.unknownProvider', { provider: String(provider ?? key) });
+    // Başlatılamamış eklentinin komutu zaten listede yoktur; öneri adı inspect'ten
+    if (!provider || !plugin?.ready || !plugin.info.suggest.includes(provider)) {
+      throw i18n.error('core.errors.unknownProvider', { provider: String(provider ?? key) });
+    }
 
     const q = String(query ?? '').trim().slice(0, 100);
     if (q.length < 2) return [];
-    const results = await fn(plugin.ctx, q);
+    const results = await plugin.host.invoke('suggest', provider, { query: q });
     const out = [];
     for (const r of Array.isArray(results) ? results : []) {
       const value = cleanSuggestion(schema, key, r?.value);
@@ -464,14 +537,15 @@ export function createCore({
     return out;
   }
 
-  // Bildirim satırındaki eylem: parametreler bildirimden core'da çıkarılır (eski bildirimlerde
+  // Bildirim satırındaki eylem: parametreler bildirimden eklentide çıkarılır (eski bildirimlerde
   // de çalışır); yalnızca komutun kendi eklentisinin bildirimine uygulanır.
-  function runForNotification(id, notificationId) {
+  async function runForNotification(id, notificationId) {
     const entry = commands.lookup(id);
     const action = entry.def.notificationAction;
     const n = notifications.get(String(notificationId));
-    const params = action && n && n.source === entry.plugin ? action.params?.(n) : null;
-    if (!params) throw i18n.error('core.commands.notApplicable');
+    const applicable = action?.hasParams && entry.host && n && n.source === entry.plugin;
+    const params = applicable ? await entry.host.invoke('notificationAction.params', entry.name, { notification: n }) : null;
+    if (!params || typeof params !== 'object') throw i18n.error('core.commands.notApplicable');
     const { runId, done } = commands.start(id, params, { origin: 'notification' });
     if (action.markRead) {
       done.then((o) => {
@@ -516,9 +590,21 @@ export function createCore({
     },
     getLocale: () => locale,
     web,
+    automation: {
+      list: automation.list,
+      save: automation.save,
+      remove: automation.remove,
+      setEnabled: automation.setEnabled,
+      test: automation.test,
+      templates: automation.templates,
+      approvals: automation.approvals,
+      approve: automation.approve,
+      reject: automation.reject
+    },
     notifications: {
       list: notifications.list,
       markRead: notifications.markRead,
+      setPinned: notifications.setPinned,
       markAllRead: notifications.markAllRead,
       content: notifications.content,
       setContent: notifications.setContent,

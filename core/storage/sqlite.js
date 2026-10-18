@@ -16,7 +16,8 @@ const toRow = (n) => ({
   received_at: n.receivedAt ?? n.createdAt,
   read: n.read ? 1 : 0,
   meta: JSON.stringify(n.meta ?? {}),
-  job: n.job ?? null
+  job: n.job ?? null,
+  pinned: n.pinned ? 1 : 0
 });
 
 const fromRow = (r) => ({
@@ -31,7 +32,8 @@ const fromRow = (r) => ({
   receivedAt: r.received_at,
   read: r.read === 1,
   meta: JSON.parse(r.meta),
-  job: r.job ?? null
+  job: r.job ?? null,
+  pinned: r.pinned === 1
 });
 
 // Node'un yerleşik SQLite'ı (node:sqlite). Electron ve test ortamı aynı modülü
@@ -67,9 +69,9 @@ export function createSqliteStorage(file = ':memory:') {
     get: db.prepare('SELECT * FROM notifications WHERE id = ?'),
     insert: db.prepare(`
       INSERT OR IGNORE INTO notifications
-        (id, source, title, body, url, level, tags, created_at, received_at, read, meta, job)
+        (id, source, title, body, url, level, tags, created_at, received_at, read, meta, job, pinned)
       VALUES
-        (:id, :source, :title, :body, :url, :level, :tags, :created_at, :received_at, :read, :meta, :job)`),
+        (:id, :source, :title, :body, :url, :level, :tags, :created_at, :received_at, :read, :meta, :job, :pinned)`),
     // Aynı createdAt'te sonradan eklenen önce gelir
     list: db.prepare('SELECT * FROM notifications ORDER BY created_at DESC, rowid DESC'),
     count: db.prepare('SELECT count(*) AS c FROM notifications'),
@@ -84,22 +86,24 @@ export function createSqliteStorage(file = ':memory:') {
     contentSet: db.prepare(`INSERT INTO contents (notification_id, format, body) VALUES (?, ?, ?)
       ON CONFLICT (notification_id) DO UPDATE SET format = excluded.format, body = excluded.body`),
     historyInsert: db.prepare(`INSERT INTO command_history
-        (run_id, command, plugin, title, params, origin, started_at, duration, status, message, error, error_i18n)
+        (run_id, command, plugin, title, params, origin, origin_label, started_at, duration, status, message, error, error_i18n)
       VALUES
-        (:run_id, :command, :plugin, :title, :params, :origin, :started_at, :duration, :status, :message, :error, :error_i18n)`),
+        (:run_id, :command, :plugin, :title, :params, :origin, :origin_label, :started_at, :duration, :status, :message, :error, :error_i18n)`),
     historyList: db.prepare('SELECT * FROM command_history ORDER BY started_at DESC, id DESC LIMIT ?'),
     historyPrune: db.prepare(`DELETE FROM command_history WHERE id IN (
       SELECT id FROM command_history ORDER BY started_at DESC, id DESC LIMIT -1 OFFSET ?)`),
     historyClear: db.prepare('DELETE FROM command_history'),
     markRead: db.prepare('UPDATE notifications SET read = 1 WHERE id = ?'),
+    setPinned: db.prepare('UPDATE notifications SET pinned = ? WHERE id = ?'),
     markAllRead: db.prepare('UPDATE notifications SET read = 1'),
     markSourceRead: db.prepare('UPDATE notifications SET read = 1 WHERE source = ?'),
     markJobRead: db.prepare('UPDATE notifications SET read = 1 WHERE source = ? AND job = ?'),
     clear: db.prepare('DELETE FROM notifications'),
     clearSource: db.prepare('DELETE FROM notifications WHERE source = ?'),
+    // Sabitlenmiş bildirimler sınırda en son silinir
     prune: db.prepare(`
       DELETE FROM notifications WHERE rowid IN (
-        SELECT rowid FROM notifications ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?
+        SELECT rowid FROM notifications ORDER BY pinned DESC, created_at DESC, rowid DESC LIMIT -1 OFFSET ?
       )`)
   };
 
@@ -128,6 +132,7 @@ export function createSqliteStorage(file = ':memory:') {
       insert: (item) => q.insert.run(toRow(item)).changes > 0,
       list: () => q.list.all().map(fromRow),
       markRead: (id) => q.markRead.run(id),
+      setPinned: (id, pinned) => q.setPinned.run(pinned ? 1 : 0, id).changes > 0,
       markAllRead: (source, job) =>
         job ? q.markJobRead.run(source, job) : source ? q.markSourceRead.run(source) : q.markAllRead.run(),
       clear: (source) => (source ? q.clearSource.run(source) : q.clear.run()),
@@ -162,13 +167,13 @@ export function createSqliteStorage(file = ':memory:') {
       add(r) {
         q.historyInsert.run({
           run_id: r.runId, command: r.command, plugin: r.plugin, title: r.title, params: JSON.stringify(r.params ?? {}),
-          origin: r.origin, started_at: r.startedAt, duration: r.duration, status: r.status,
+          origin: r.origin, origin_label: r.originLabel ?? null, started_at: r.startedAt, duration: r.duration, status: r.status,
           message: r.message ?? null, error: r.error ?? null, error_i18n: r.errorI18n ? JSON.stringify(r.errorI18n) : null
         });
       },
       list: (limit) => q.historyList.all(limit).map((r) => ({
         id: r.id, runId: r.run_id, command: r.command, plugin: r.plugin, title: r.title, params: JSON.parse(r.params),
-        origin: r.origin, startedAt: r.started_at, duration: r.duration, status: r.status,
+        origin: r.origin, originLabel: r.origin_label ?? null, startedAt: r.started_at, duration: r.duration, status: r.status,
         message: r.message, error: r.error, errorI18n: r.error_i18n ? JSON.parse(r.error_i18n) : null
       })),
       prune: (max) => q.historyPrune.run(max),

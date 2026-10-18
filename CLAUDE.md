@@ -1,30 +1,44 @@
 # CLAUDE.md
 
-Pano için oturumlar arası referans. Kısa tutulur; ayrıntı için README.md.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Pano için oturumlar arası referans. Kısa tutulur; ayrıntı için README.md (eklenti yazma
+rehberi, denemek için örnek RSS/Steam kaynakları, ertelenen işler: DeepL, Store, winget).
 
 ## Amaç ve yol haritası
 
 Pano, Electron + React ile yazılmış, eklenti tabanlı kişisel bir bildirim panelidir.
-Sırasıyla: (1) **bildirimler** — kaynak eklentileri (şimdi GitHub) periyodik çalışır,
-ortak şemada bildirim üretir; (2) **oyun verileri ve profil kartları** — `providers`
-ve `widgets` katkı türleri; (3) **komutlar** — `commands` katkı türü ve komut paleti;
-(4) **otomasyon** — bildirim olaylarına (`bus`) bağlanan kurallar. Yeni iş bu sıraya
-uyar; ileriki aşamaya ait altyapıyı erkenden kurma.
+Tamamlanan aşamalar: (1) **bildirimler** (GitHub, RSS, Steam kaynakları); (2) **kartlar**
+(`providers`/`widgets`, panel); (3) **komutlar** (`commands`, komut paleti, geçmiş);
+(4) **otomasyon** (kurallar). Sıradaki aşamalar, her biri ayrı oturumda: (A) **eklenti
+izolasyonu** (her eklenti ayrı süreçte, ctx RPC ile; eklenti API'si değişmeden),
+(B) **izinler** (network alan adı listesi, filesystem, kurulumda onay ekranı),
+(C) **dağıtım** (electron-builder NSIS/dmg, electron-updater, GitHub Actions, imzalama).
+Yeni iş bu sıraya uyar; ileriki aşamaya ait altyapıyı erkenden kurma.
 
 ## Yapı
 
 ```
 core/          Electron'dan bağımsız çekirdek (createCore → bus, start/stop, notifications, sources)
   loader.js    plugins/*/manifest.json okur, default export'u dinamik import eder
+  plugin-host.js  eklenti sınırı: core eklenti koduna yalnızca buradan ulaşır. inspect() sabit bilgi,
+               describe(settings) ayara bağlı katkıların düz JSON açıklaması (core önbelleğe alır;
+               listeler eklenti kodunu çağırmaz), invoke(tür, kimlik, argümanlar, { signal, onProgress })
+               her çağrı. Şimdi süreç içi; aşama A2'de aynı arayüz RPC ile ayrı sürece taşınır
   context.js   eklentiye verilen ctx (izinli yetenekler: forCommand)
   schema.js    ayar ve komut parametresi şeması (coerce, validateParams)
   commands.js  komut kayıt defteri, çalıştırma (iptal, ilerleme), geçmiş (en yeni 200)
+  automation/  otomasyon motoru: rules.js (doğrulama, croner ile cron), conditions.js, template.js
+               ({{alan}} yalnızca alan erişimi), fields.js (getPath), templates.js (hazır şablonlar)
+  providers.js / widgets.js  kart verisi önbelleği ve görünüm şeması temizliği
+  web.js       okuyucunun sayfa/görsel indirmesi (adres denetimi, boyut/süre sınırı); xml.js ayrıştırıcı
   scheduler.js zincirleme setTimeout ile kaynak işleri, durum olayları
   notifications.js  ortak bildirim şeması, id ile tekrar engelleme, en fazla 500 kayıt
   secrets.js   şifreleme dışarıdan verilen (cipher) gizli alan deposu
-  storage/     depo adaptörü (openStorage): node:sqlite ile userData/pano.db; kv tablosu
-               (settings, state, secrets, app) + notifications tablosu; migrations.js
-               sıralı migration'lar (schema_version); legacy-json.js eski pano.json aktarımı
+  storage/     depo adaptörü (openStorage): node:sqlite ile userData/pano.db. Tablolar: kv (settings,
+               state, secrets, app, dashboard, automations, automationState), notifications,
+               contents, provider_cache, command_history; migrations.js sıralı migration'lar
+               (şu an 9; schema_version); legacy-json.js eski pano.json aktarımı
 plugins/github/  örnek kaynak eklentisi (manifest.json + index.js)
 plugins/rss/     ayarlardaki her akış ayrı kaynak işi (sources fonksiyon); ilk çalıştırmada son 5 giriş
 plugins/steam/   api.js (ortak istek/hata), news.js (GetNewsForApp, news-<appId> işleri),
@@ -37,6 +51,9 @@ src/main/      Electron ana süreç: cipher (safeStorage), IPC, masaüstü bildi
 src/preload/   window.pano köprüsü (contextBridge)
 src/renderer/  React arayüz (App.jsx, components/, lib/usePano.js, lib/i18n.jsx, styles.css)
 shared/i18n.js çeviri modülü (core, main ve arayüz ortak; saf JS)
+shared/rpc.js  taşıyıcıdan bağımsız RPC (istek/yanıt, zaman aşımı, iptal, ilerleme, ping, hata
+               serileştirme; gelen mesajı güvenilmez sayar). A2'de main ↔ eklenti süreci arasında
+shared/automation.js  otomasyonun core ve arayüzde ortak sınırları/listeleri
 locales/       uygulama katalogları tr.js / en.js; eklentiler plugins/<ad>/locales/*.json
 ```
 
@@ -76,6 +93,10 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
      gelir (lib/dashboard.js): sıra hiç değişmez, satıra sığmayan geniş kart satırın kalanını
      doldurur. CSS `grid-auto-flow: dense` kullanılmaz (sırayı bozar).
    - `content(ctx, bildirim)`: "Tam metni getir" için tam metin (bkz. kural 4).
+   - **Açıklama önbelleği**: `sources`/`widgets`/`commands` fonksiyonları yalnızca `describe` sırasında
+     (başlangıç, ayar kaydı, dil değişimi) çalışır; `setup` bitmeden ve başlatılamamış eklentide hiç
+     çalışmaz. Bu yüzden `updateSettings`, `setLocale` ve `runForNotification` asenkrondur. Sınırdan
+     yalnızca düz veri geçer (fonksiyon yok); hatalar `{ name, message, i18n, code, line }` olarak.
    - `commands`: `{ [ad]: { title, description?, params?, confirm?, palette?, notificationAction?,
      async run(ctx, params, { signal, progress }) → { message? } } }` ya da `(settings, ctx) => {...}`.
      Anahtar `eklenti/komut`; uygulamanın kendi komutları `pano/…` ("pano" eklenti adı ayrılmış).
@@ -97,7 +118,9 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
    iç içe liste yok; boş satır ham değere göre, `required` sayılarda da geçerli; alt alanın
    `width: 'wide'` ipucu ayarlar panelinde o sütunu genişletir). İsteğe bağlı `setup: { title, body, action }`: eklentinin hiç
    kaynağı yokken (ör. akışsız RSS) akışta gösterilen kurulum ekranı metni. `manifest.name`: `^[a-z0-9][a-z0-9-]*$`.
-3. **Eklentiler Node'a doğrudan erişmez**, yalnızca `core/context.js`'deki `ctx`
+3. **Eklentiler Node'a doğrudan erişmez** (kural olarak; bugün eklentiler ana süreçte
+   çalıştığı için bu bir düzen, gerçek bir güvenlik sınırı değil — izolasyon aşama A),
+   yalnızca `core/context.js`'deki `ctx`
    üzerinden: `log`, `warn`, `notify`, `fetch` (20 sn zaman aşımı), `settings.get/all`,
    `secrets.get`, `state.get/set`, `parseXml` (fast-xml-parser; ENTITY reddedilir). Eklenti
    klasörleri uygulamanın node_modules'una erişemez (paketlenince asar içinde); npm
@@ -105,7 +128,7 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
    etmek yerine `ctx`'e eklenir (eklenti adıyla kapsamlanmış şekilde).
 4. **Tüm bildirimler `core/notifications.js`'deki ortak şemadan geçer**
    (`id, source, title, body, url, level: info|warning|error, tags, createdAt,
-   receivedAt, read, meta, job`). `meta.excerpt` (düz metin, ≤200 karakter) varsa arayüz başlığın
+   receivedAt, read, meta, job, pinned`). `source: 'pano'` uygulamanın kendi bildirimleridir. `meta.excerpt` (düz metin, ≤200 karakter) varsa arayüz başlığın
    altında iki satırlık özet gösterir. `body` arayüzde kaynak çipinde ("Steam · oyun adı")
    görünür; oyun/akış/depo adı olmalı. Eklenti `ctx.notify` çağırır; id otomatik
    `eklenti:id` olarak öneklenir. `job` (bildirimi üreten kaynak işi, ör. `news-730`) core
@@ -145,6 +168,26 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
    `app.getPreferredSystemLanguages()` ile çözülür ve `core.setLocale()` ile verilir.
    test/core/catalogs.test.js iki dilin anahtar/yer tutucu eşleşmesini ve manifest
    metinlerinin İngilizcesini denetler.
+8. **Otomasyon** (`core/automation/`). Kural `{ id, name, enabled, trigger, conditions, actions }`;
+   tetikleyiciler `notification` (bus `notification:new`), `schedule` (croner 10, sabit sürüm;
+   bağımlılığı yok, `nextRuns` önizlemesi) ve `app: start`. Koşullar yalnızca bildirim tetikleyicisinde:
+   alanlar `source level title body url job tags meta.*`, operatörler `eq neq contains matches in`, hepsi
+   "ve"; etiket anahtarıyla ya da o anki dildeki çevirisiyle eşleşir. Eylemler komuttur (`{ type: 'notify' }`
+   → `pano/notify`), geçmişe `origin: automation` + `originLabel` (kural adı) ile düşer. Yardımcı
+   komutlar: `pano/notify`, `pano/alert` (bus `app:alert` → main sesli bildirim), `pano/pin|unpin`.
+   **Döngü önleme açık kimlikle**: otomasyon komutu kural zinciriyle (`chain`) başlatır; her komut
+   çalıştırmasının `runId`'si var. Çalıştırma sırasında doğan bildirim `causedBy: runId` taşır
+   (`ctx.forCommand` ve `ctx.forJob(id, { causedBy })` ekler; `notifications.add(raw, { causedBy })` →
+   bus `notification:new` ikinci argümanı). Zincir `commands.chainOf(runId)` ile okunur (bittikten sonra
+   60 sn tutulur); `ctx.runCommand` zinciri devralır, `scheduler.runNow(key, { causedBy })` kaynak işine
+   geçirir. Zincirdeki kural yeniden tetiklenmez (en fazla 5). Örtük bağlam (AsyncLocalStorage)
+   kullanılmaz: kimlik düz metin olduğu için eklenti ayrı süreçte de çalışır. Bildirim üreten yeni
+   kod yolu nedeni taşımalıdır. Hız sınırı: kural başına 60 sn'de 10 çalışma (`shared/automation.js`);
+   aşım zincirden geliyorsa (döngü olasılığı) kural kapanır ve `pano` kaynaklı uyarı düşer, dışarıdan
+   gelen bildirim yağmurunda fazlası atlanır (`state.throttled`), kural açık kalır. `confirm: true` komut otomasyondan çalışacaksa onay istenir (masaüstü bildirimi → uygulamadaki
+   onay listesi; 15 dk içinde onay yoksa çalışmaz). `test(kural, bildirimId)` hiçbir şey çalıştırmadan
+   koşul sonuçlarını ve doldurulmuş parametreleri verir. Bildirimin `pinned` alanı (migration 9)
+   sabitlenenleri akışta üstte tutar ve 500 sınırında en son siler.
 
 ## Komutlar
 
@@ -155,7 +198,16 @@ npm run build    # electron-vite build → out/
 npm run start    # derlenmiş hali önizle
 npm run dist     # build + electron-builder kurulum dosyası (dist/)
 npm test         # vitest run: test/ altındaki core ve eklenti birim testleri (Electron'suz)
+npx vitest run test/core/automation.test.js        # tek dosya
+npx vitest run test/core/commands.test.js -t "iptal"  # adına göre tek test
 ```
+
+- VS Code terminalinde `ELECTRON_RUN_AS_NODE=1` tanımlı olabilir; Electron'u bu
+  değişkenle başlatmak pencereyi açmaz, önce kaldırılmalı.
+- Windows'ta `npm run dist` winCodeSign arşivini açarken sembolik bağ ister: Geliştirici
+  Modu açık değilse kurulum dosyası üretilemez (build yine de çalışır).
+- Uygulamayı denemek için ayrı veri klasörü: `electron . --user-data-dir=<geçici klasör>`;
+  kullanıcının gerçek verisi (`%APPDATA%/pano`) değiştirilmez.
 
 Testler `test/core/*.test.js`, `test/plugins/*.test.js` ve arayüzün JSX'siz mantığı için
 `test/renderer/*.test.js` (ör. `src/renderer/src/lib/setup.js`); ortak yardımcılar
@@ -184,7 +236,8 @@ yayınlanmış migration değiştirilmez. `node:sqlite` Vite 5'te çözülemedi�
 `--bg --rail --surface --line --text --muted --amber --amber-ink --ok --err --focus`,
 fontlar `--display` (Chakra Petch 500/600, başlıklar) ve `--body` (Manrope 400/600/700,
 gövde). Tema koyu (`color-scheme: dark`). Yeni arayüz yalnızca bu değişkenleri
-kullanır; **yeni renk veya font eklenmez**, sabit hex yazılmaz. Fontlar
+kullanır; **yeni renk veya font eklenmez**, sabit hex yazılmaz. Saydam tonlar mevcut
+değişkenlerden `color-mix(...)` ile türetilir; karartma/gölge `--scrim`. Fontlar
 `@fontsource` paketlerinden `main.jsx`'te import edilir (CSP harici kaynağa izin vermez).
 
 ## Çalışma şekli

@@ -24,9 +24,11 @@ export function createContext(pluginName, {
 
   // job: bildirimi üreten kaynak işi (ör. news-730). Eklentiden alınmaz, core yazar;
   // arayüz bununla oyun/akış bazında filtreler.
-  function notifyFor(n, job) {
+  // causedBy: bu bildirimi doğuran komut çalıştırması (varsa). Düz metin olduğu için eklenti ayrı
+  // süreçte çalışsa da taşınır; otomasyon zinciri buradan çıkarılır.
+  function notifyFor(n, job, causedBy = null) {
     if (!n?.id || !n?.title) throw new Error('Bildirimde id ve title zorunlu');
-    return notifications.add({ ...n, id: `${pluginName}:${n.id}`, source: pluginName, job });
+    return notifications.add({ ...n, id: `${pluginName}:${n.id}`, source: pluginName, job }, { causedBy });
   }
 
   const ctx = {
@@ -35,24 +37,26 @@ export function createContext(pluginName, {
     log: (...args) => logger.log(prefix, ...args),
     warn: (...args) => logger.warn(prefix, ...args),
 
-    notify: (n) => notifyFor(n, null),
+    notify: (n) => notifyFor(n, null, null),
 
     // Bir kaynak işi çalışırken eklentiye bu kopya verilir; aynı anda çalışan
     // işlerin bildirimleri birbirine karışmaz.
-    forJob: (job) => ({ ...ctx, notify: (n) => notifyFor(n, job) }),
+    // causedBy: iş bir komut tarafından başlatıldıysa (ör. otomasyonun "tüm kaynakları kontrol et"i)
+    forJob: (job, { causedBy = null } = {}) => ({ ...ctx, notify: (n) => notifyFor(n, job, causedBy) }),
 
     // Komut çalışırken verilen kopya: iptal sinyali ve izinli yetenekler. depth iç içe
     // runCommand zincirinin uzunluğu (döngüyü core sınırlar).
-    forCommand: ({ signal, depth = 0 }) => ({
+    forCommand: ({ signal, depth = 0, runId = null }) => ({
       ...ctx,
       signal,
+      notify: (n) => notifyFor(n, null, runId),
       async openExternal(url) {
         check('openExternal', true);
         return capabilities.openExternal(String(url ?? ''));
       },
       async runCommand(id, params = {}) {
         check('runCommand', true);
-        return capabilities.runCommand(String(id ?? ''), params, { depth: depth + 1, signal, caller: pluginName });
+        return capabilities.runCommand(String(id ?? ''), params, { depth: depth + 1, signal, caller: pluginName, causedBy: runId });
       }
     }),
 

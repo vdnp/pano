@@ -24,7 +24,7 @@ export default function RunToasts({ runs, onDismiss }) {
             <div className="run-head">
               <span className="run-title" title={title}>{title}</span>
               {run.status === 'running' ? (
-                <button className="link run-cancel" onClick={() => api.commands.cancel(run.runId)} aria-label={t('runs.cancelLabel', { title })}>
+                <button className="link run-cancel" onClick={() => api.commands.cancel(run.runId).catch(() => {})} aria-label={t('runs.cancelLabel', { title })}>
                   {t('runs.cancel')}
                 </button>
               ) : (

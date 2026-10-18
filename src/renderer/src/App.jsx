@@ -10,6 +10,7 @@ import Dashboard from './components/Dashboard.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
 import RunToasts from './components/RunToasts.jsx';
 import HistoryView from './components/HistoryView.jsx';
+import AutomationsView from './components/AutomationsView.jsx';
 import { useCommands } from './lib/useCommands.js';
 import { needsInput } from './lib/commands.js';
 import { I18nProvider, useI18n } from './lib/i18n.jsx';
@@ -17,6 +18,9 @@ import { pluginName } from './lib/plugin-text.js';
 import {
   ALL, filterNotifications, jobKey, jobsOf, resolveSelection, selectionForNotification, tagSummary, unreadCounts
 } from './lib/filter.js';
+
+// Sonucu beklenmeyen IPC çağrıları: kapanış sırasında reddedilebilir; durum olaylarla güncellenir
+const quiet = (promise) => promise.catch(() => {});
 
 export default function App() {
   const pano = usePano();
@@ -51,7 +55,7 @@ function Shell({ notifications, sources, appSettings, ready }) {
   const [view, setViewState] = useState(() => {
     try {
       const saved = localStorage.getItem('pano.view');
-      return ['notifications', 'history'].includes(saved) ? saved : 'panel';
+      return ['notifications', 'history', 'automations'].includes(saved) ? saved : 'panel';
     } catch {
       return 'panel';
     }
@@ -81,6 +85,17 @@ function Shell({ notifications, sources, appSettings, ready }) {
     };
   }, []);
 
+  // Onay bekleyen otomasyon komutları: kenar çubuğunda sayaç; masaüstü bildirimine tıklanınca
+  // Otomasyonlar görünümü açılır (onay orada verilir)
+  const [approvalCount, setApprovalCount] = useState(0);
+  useEffect(() => {
+    // Kapanış sırasında IPC reddedilebilir; sayaç bir sonraki olayda güncellenir
+    const load = () => api.automation.approvals().then((list) => setApprovalCount(list.length)).catch(() => {});
+    load();
+    const off = [api.on('automation:changed', load), api.on('automation:show', () => setView('automations'))];
+    return () => off.forEach((fn) => fn());
+  }, []);
+
   // Seçili oyun/akış ayarlardan silinmişse bir üst seviyeye düşülür
   const resolved = resolveSelection(rawSelection, sources);
   // Oyun/akış değişince tür seçimi sıfırlanır
@@ -105,8 +120,9 @@ function Shell({ notifications, sources, appSettings, ready }) {
     [notifications, selection.source, selection.job, selection.tag, unreadOnly]
   );
 
+  // "pano": uygulamanın kendi bildirimleri (otomasyon uyarıları, pano/notify)
   const sourceNames = useMemo(
-    () => Object.fromEntries(sources.map((s) => [s.name, pluginName(i18n, s)])),
+    () => ({ pano: i18n.t('app.name'), ...Object.fromEntries(sources.map((s) => [s.name, pluginName(i18n, s)])) }),
     [sources, i18n]
   );
 
@@ -115,6 +131,7 @@ function Shell({ notifications, sources, appSettings, ready }) {
     { id: 'ui:panel', text: i18n.t('palette.ui.panel'), run: () => setView('panel') },
     { id: 'ui:notifications', text: i18n.t('palette.ui.notifications'), run: () => select(null) },
     { id: 'ui:history', text: i18n.t('palette.ui.history'), run: () => setView('history') },
+    { id: 'ui:automations', text: i18n.t('palette.ui.automations'), run: () => setView('automations') },
     { id: 'ui:appSettings', text: i18n.t('palette.ui.appSettings'), run: () => setAppSettingsOpen(true) },
     ...sources.map((s) => ({
       id: `ui:settings:${s.name}`,
@@ -173,7 +190,9 @@ function Shell({ notifications, sources, appSettings, ready }) {
         onSelect={select}
         onShowPanel={() => setView('panel')}
         onShowHistory={() => setView('history')}
-        onRunNow={(key) => api.sources.runNow(key)}
+        onShowAutomations={() => setView('automations')}
+        approvalCount={approvalCount}
+        onRunNow={(key) => quiet(api.sources.runNow(key))}
         onOpenSettings={setSettingsFor}
         onOpenAppSettings={() => setAppSettingsOpen(true)}
         now={now}
@@ -183,6 +202,13 @@ function Shell({ notifications, sources, appSettings, ready }) {
         <Dashboard sourceNames={sourceNames} now={now} />
       ) : view === 'history' ? (
         <HistoryView commands={commands} onRerun={rerun} now={now} />
+      ) : view === 'automations' ? (
+        <AutomationsView
+          commands={commands}
+          notifications={notifications}
+          sources={sources.map((s) => ({ name: s.name, label: sourceNames[s.name] }))}
+          now={now}
+        />
       ) : (
       <Feed
         ready={ready}
@@ -202,17 +228,18 @@ function Shell({ notifications, sources, appSettings, ready }) {
         onOpenSettings={setSettingsFor}
         onOpen={(n) => {
           // Haber uygulama içinde okuyucu panelinde açılır; tarayıcı paneldeki düğmeyle
-          if (!n.read) api.notifications.markRead(n.id);
+          if (!n.read) quiet(api.notifications.markRead(n.id));
           setReadingId(n.id);
         }}
-        onMarkRead={(n) => api.notifications.markRead(n.id)}
+        onMarkRead={(n) => quiet(api.notifications.markRead(n.id))}
+        onTogglePin={(n) => quiet(api.notifications.setPinned(n.id, !n.pinned))}
         actions={notificationActions}
         onRunAction={(command, n) => api.commands.runForNotification(command.id, n.id).catch((err) => report(command, err))}
         onMarkAllRead={() =>
           // Tür seçiliyken yalnızca görünenler; değilse core eklenti/oyun kapsamında işaretler
-          selection.tag
+          quiet(selection.tag
             ? api.notifications.markRead(visible.filter((n) => !n.read).map((n) => n.id))
-            : api.notifications.markAllRead(selection.source ?? undefined, selection.job ?? undefined)
+            : api.notifications.markAllRead(selection.source ?? undefined, selection.job ?? undefined))
         }
         now={now}
       />

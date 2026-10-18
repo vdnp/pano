@@ -43,7 +43,8 @@ function LinkOut({ href, children }) {
       href={href}
       onClick={(e) => {
         e.preventDefault();
-        api.openExternal(href);
+        // İzin verilmeyen adresi main reddeder; burada gösterilecek bir şey yok
+        api.openExternal(href).catch(() => {});
       }}
     >
       {children}
@@ -140,7 +141,8 @@ export default function ReaderPanel({ notification: n, sourceName, onClose }) {
       if (currentId.current !== id) return;
       setState({ status: 'ready', blocks: contentToBlocks(article.content, page.url) });
       setFetchState({ status: 'done' });
-      api.notifications.setContent(id, article.content);
+      // Önbelleğe yazılamazsa yalnızca sonraki açılışta yeniden indirilir
+      api.notifications.setContent(id, article.content).catch(() => {});
     } catch (err) {
       if (currentId.current === id) setFetchState({ status: 'failed', message: ipcMessage(err) });
     }
@@ -203,7 +205,7 @@ export default function ReaderPanel({ notification: n, sourceName, onClose }) {
 
         {n.url && (
           <footer className="reader-actions">
-            <button className="btn btn-primary" onClick={() => api.openExternal(n.url)}>
+            <button className="btn btn-primary" onClick={() => api.openExternal(n.url).catch(() => {})}>
               {t('reader.openInBrowser')}
               <ExternalIcon />
             </button>

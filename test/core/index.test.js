@@ -46,7 +46,7 @@ describe('createCore', () => {
 
   const demo = () => core.sources.list().find((s) => s.name === 'demo');
 
-  it('kaynakları şema, varsayılan ayarlar ve iş durumuyla listeler', () => {
+  it('kaynakları şema, varsayılan ayarlar ve iş durumuyla listeler', async () => {
     expect(demo()).toMatchObject({
       name: 'demo',
       displayName: 'Demo',
@@ -67,24 +67,24 @@ describe('createCore', () => {
       [{ flag: 'true' }, { flag: true }],
       [{ label: 42 }, { label: '42' }],
       [{ label: null }, { label: '' }]
-    ])('%j → %j', (input, expected) => {
-      core.sources.updateSettings('demo', input);
+    ])('%j → %j', async (input, expected) => {
+      await core.sources.updateSettings('demo', input);
       expect(demo().settings).toMatchObject(expected);
     });
 
-    it('şemada olmayan anahtarları atar ve diğerlerini korur', () => {
-      core.sources.updateSettings('demo', { interval: 10, bilinmeyen: 'x' });
-      core.sources.updateSettings('demo', { flag: true });
+    it('şemada olmayan anahtarları atar ve diğerlerini korur', async () => {
+      await core.sources.updateSettings('demo', { interval: 10, bilinmeyen: 'x' });
+      await core.sources.updateSettings('demo', { flag: true });
       expect(demo().settings).toEqual({ interval: 10, flag: true, label: '' });
     });
 
-    it('aralık değişince işi yeniden zamanlar', () => {
-      core.sources.updateSettings('demo', { interval: 15 });
+    it('aralık değişince işi yeniden zamanlar', async () => {
+      await core.sources.updateSettings('demo', { interval: 15 });
       expect(demo().jobs[0].intervalMs).toBe(15 * 60_000);
     });
 
-    it('bilinmeyen eklentide hata fırlatır', () => {
-      expect(() => core.sources.updateSettings('yok', {})).toThrow('Eklenti bulunamadı: yok');
+    it('bilinmeyen eklentide hata fırlatır', async () => {
+      await expect(core.sources.updateSettings('yok', {})).rejects.toThrow('Eklenti bulunamadı: yok');
     });
   });
 
@@ -119,7 +119,7 @@ describe('createCore', () => {
   });
 
   it('ayarlar ve gizli alanlar yeniden açılışta korunur', async () => {
-    core.sources.updateSettings('demo', { interval: 20 });
+    await core.sources.updateSettings('demo', { interval: 20 });
     core.sources.setSecret('demo', 'token', 'abc');
     await core.stop();
 

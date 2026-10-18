@@ -48,6 +48,21 @@ export default {
         outOfRange: '"{param}" {min} ile {max} arasında olmalı.'
       },
       builtin: {
+        notify: 'Pano bildirimi oluştur',
+        notifyDone: 'Bildirim oluşturuldu.',
+        alert: 'Sesli masaüstü uyarısı göster',
+        alertDone: 'Uyarı gösterildi.',
+        pin: 'Bildirimi üste sabitle',
+        pinDone: 'Bildirim sabitlendi.',
+        unpin: 'Bildirimin sabitlemesini kaldır',
+        unpinDone: 'Sabitleme kaldırıldı.',
+        notificationNotFound: 'Bildirim bulunamadı; silinmiş olabilir.',
+        params: {
+          title: 'Başlık',
+          body: 'Ayrıntı',
+          level: 'Düzey',
+          id: 'Bildirim kimliği'
+        },
         runAll: 'Tüm kaynakları kontrol et',
         runAllDone: { one: '{count} kaynak kontrol edildi.', other: '{count} kaynak kontrol edildi.' },
         runAllFailed: { one: '{count} kaynak kontrol edildi, {failed} tanesi hata verdi.', other: '{count} kaynak kontrol edildi, {failed} tanesi hata verdi.' },
@@ -62,6 +77,42 @@ export default {
         openExternal: 'Bağlantı açma',
         runCommand: 'Başka komutları çalıştırma'
       }
+    },
+    automation: {
+      rateThrottled: { one: 'Hız sınırı: {count} çalışma atlandı (dakikada en fazla {limit}).', other: 'Hız sınırı: {count} çalışma atlandı (dakikada en fazla {limit}).' },
+      interrupted: 'Uygulama kapandığı için yarıda kaldı.',
+      tag: 'Otomasyon',
+      rateLimited: {
+        title: '"{name}" otomasyonu kapatıldı',
+        body: "Kural bir dakikada {count} kereden fazla çalıştı; döngü olabilir. Kuralı kontrol edip Otomasyonlar'dan yeniden aç."
+      },
+      approval: {
+        title: 'Otomasyon onay bekliyor',
+        body: '{rule}: {command}. Onaylamak ya da reddetmek için tıkla.',
+        rejected: 'Onay reddedildi; komut çalıştırılmadı.',
+        expired: 'Onay 15 dakika içinde gelmedi; komut çalıştırılmadı.'
+      },
+      templates: {
+        reviewAlert: 'İnceleme istendiğinde sesli uyarı',
+        pinPatch: 'Takip ettiğim oyuna yama gelince bildirimi üste sabitle',
+        morningCheck: 'Hafta içi her sabah tüm kaynakları kontrol et'
+      },
+      errors: {
+        invalid: 'Kural okunamadı.',
+        notFound: 'Kural bulunamadı.',
+        noName: 'Kurala bir ad ver.',
+        badTrigger: 'Bir tetikleyici seç.',
+        badCron: 'Cron ifadesi geçersiz: "{cron}". Örnek: 0 9 * * 1-5 (hafta içi 09:00).',
+        badField: '{index}. koşulun alanı geçersiz: {field}',
+        badOp: '{index}. koşulun karşılaştırması geçersiz: {op}',
+        emptyValue: '{index}. koşulun değeri boş.',
+        badPattern: '{index}. koşulun düzenli ifadesi geçersiz ya da 200 karakterden uzun.',
+        badCommand: '{index}. eylem için bir komut seç.',
+        noActions: 'En az bir eylem ekle.',
+        tooManyConditions: 'En fazla {max} koşul eklenebilir.',
+        tooManyActions: 'En fazla {max} eylem eklenebilir.',
+        tooManyRules: 'En fazla {max} kural oluşturulabilir.'
+      }
     }
   },
 
@@ -71,11 +122,16 @@ export default {
     yesterday: 'Dün'
   },
 
+  app: {
+    name: 'Pano'
+  },
+
   nav: {
     label: 'Görünüm',
     panel: 'Panel',
     notifications: 'Bildirimler',
-    history: 'Geçmiş'
+    history: 'Geçmiş',
+    automations: 'Otomasyonlar'
   },
 
   dashboard: {
@@ -126,6 +182,9 @@ export default {
   },
 
   feed: {
+    pinned: 'Sabitlenenler',
+    pin: 'Sabitle',
+    unpin: 'Sabitlemeyi kaldır',
     title: 'Bildirimler',
     unread: { one: '{count} okunmamış', other: '{count} okunmamış' },
     allRead: 'Hepsi okundu',
@@ -220,6 +279,110 @@ export default {
   },
 
 
+
+  automations: {
+    title: 'Otomasyonlar',
+    subtitle: { one: '{count} kural', other: '{count} kural' },
+    new: 'Yeni kural',
+    fromTemplate: 'Şablondan başla',
+    templatesLabel: 'Hazır şablonlar',
+    empty: 'Henüz otomasyon yok. Yeni bir kural oluştur ya da hazır bir şablondan başla.',
+    toggleLabel: '{name} kuralını aç ya da kapat',
+    edit: 'Düzenle',
+    delete: 'Sil',
+    deleteConfirm: '"{name}" kuralı silinsin mi?',
+    trigger: {
+      notification: 'Bildirim geldiğinde',
+      schedule: 'Zamanlı · {cron}',
+      app: 'Uygulama açılınca'
+    },
+    conditionCount: { one: '{count} koşul', other: '{count} koşul' },
+    actionCount: { one: '{count} eylem', other: '{count} eylem' },
+    nextRun: 'Sonraki: {at, date} {at, time}',
+    neverRun: 'Henüz çalışmadı',
+    lastRun: 'Son çalışma {when}',
+    status: {
+      ok: 'Tamamlandı',
+      error: 'Hata',
+      skipped: 'Çalışmadı',
+      running: 'Çalışıyor'
+    },
+    disabledRateLimit: 'Dakikada {count} çalışma sınırı aşıldığı için otomatik kapatıldı.',
+    approvals: {
+      title: 'Onay bekleyenler',
+      body: '{rule} → {command}',
+      approve: 'Onayla',
+      reject: 'Reddet',
+      expires: 'Saat {at, time} olunca iptal olur'
+    },
+    editor: {
+      titleNew: 'Yeni kural',
+      titleEdit: 'Kuralı düzenle',
+      name: 'Kural adı',
+      enabled: 'Kural açık',
+      step1: '1. Tetikleyici',
+      step2: '2. Koşullar',
+      step3: '3. Eylemler',
+      triggerNotification: 'Yeni bildirim geldiğinde',
+      triggerSchedule: 'Belirli zamanlarda',
+      triggerApp: 'Uygulama açıldığında',
+      preset: 'Sıklık',
+      presets: {
+        weekdayMorning: 'Hafta içi her sabah 09:00',
+        everyHour: 'Her saat başı',
+        everyEvening: 'Her gün 18:00',
+        custom: 'Özel (cron ifadesi)'
+      },
+      cron: 'Cron ifadesi',
+      cronHelp: 'dakika · saat · ayın günü · ay · haftanın günü (ör. 0 9 * * 1-5)',
+      nextRuns: 'Sonraki çalışmalar',
+      conditionsHelp: 'Tüm koşullar sağlanınca çalışır. Koşul eklemezsen her yeni bildirimde çalışır.',
+      conditionsOnlyNotification: 'Koşullar yalnızca bildirim tetikleyicisinde kullanılır.',
+      addCondition: 'Koşul ekle',
+      removeCondition: 'Koşulu kaldır',
+      field: 'Alan',
+      op: 'Karşılaştırma',
+      value: 'Değer',
+      inHelp: 'Birden fazla değeri virgülle ayır.',
+      ops: {
+        eq: 'eşittir',
+        neq: 'eşit değildir',
+        contains: 'içerir',
+        matches: 'düzenli ifadeye uyar',
+        in: 'şunlardan biri'
+      },
+      fields: {
+        source: 'Kaynak',
+        level: 'Düzey',
+        title: 'Başlık',
+        body: 'Ayrıntı (oyun, akış, depo)',
+        url: 'Adres',
+        job: 'Kaynak işi',
+        tags: 'Etiket'
+      },
+      addAction: 'Eylem ekle',
+      removeAction: 'Eylemi kaldır',
+      command: 'Komut',
+      chooseCommand: 'Komut seç',
+      templateHelp: 'Alanlara tetikleyen olaydan değer yazabilirsin: {fields}',
+      noParams: 'Bu komut parametre almaz.',
+      confirmWarning: 'Bu komut onay ister: otomasyondan çalışınca masaüstü bildirimiyle onayın sorulur.',
+      save: 'Kaydet',
+      cancel: 'Vazgeç',
+      close: 'Kapat',
+      test: 'Dene',
+      testHelp: 'Kuralı akıştaki bir bildirimle dene. Hiçbir komut çalıştırılmaz.',
+      chooseNotification: 'Bildirim seç',
+      noNotifications: 'Akışta denenecek bildirim yok.',
+      matched: 'Bu bildirimde kural çalışır.',
+      notMatched: 'Bu bildirimde kural çalışmaz.',
+      wouldRun: 'Çalışacak eylemler',
+      actual: 'gerçek değer: {value}',
+      emptyValue: '(boş)',
+      needsConfirm: 'onay ister'
+    }
+  },
+
   palette: {
     label: 'Komut paleti',
     placeholder: 'Komut ara…',
@@ -241,6 +404,7 @@ export default {
     back: 'Geri',
     listUnsupported: 'Bu komut liste türünde bir parametre istiyor; paletten çalıştırılamaz.',
     ui: {
+      automations: 'Otomasyonları aç',
       panel: 'Panele git',
       notifications: 'Bildirimlere git',
       history: 'Komut geçmişini aç',
@@ -273,6 +437,7 @@ export default {
       cancelled: 'İptal edildi'
     },
     origin: {
+      automation: 'Otomasyon: {name}',
       palette: 'Palet',
       history: 'Geçmiş',
       notification: 'Bildirim',

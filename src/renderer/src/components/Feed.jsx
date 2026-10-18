@@ -56,7 +56,8 @@ function ChipRow({ chips, label, onSelect }) {
 
 export default function Feed({
   ready, title, eyebrow, chips, onSelectChip, typeChips, onSelectTypeChip, items, unreadCount, unreadOnly, onToggleUnread,
-  sourceNames, onSelectOrigin, needsSetup, onOpenSettings, onOpen, onMarkRead, onMarkAllRead, actions = {}, onRunAction, now
+  sourceNames, onSelectOrigin, needsSetup, onOpenSettings, onOpen, onMarkRead, onMarkAllRead, onTogglePin,
+  actions = {}, onRunAction, now
 }) {
   const i18n = useI18n();
   const { t, time } = i18n;
@@ -89,8 +90,12 @@ export default function Feed({
           <EmptyState needsSetup={needsSetup} unreadOnly={unreadOnly} onOpenSettings={onOpenSettings} />
         )}
 
-        {groupByDay(items, time.dayLabel).map((group) => (
-          <section key={group.label} className="day">
+        {/* Sabitlenenler (kullanıcı ya da otomasyon) gün gruplarının üstünde */}
+        {[
+          ...(items.some((n) => n.pinned) ? [{ label: t('feed.pinned'), items: items.filter((n) => n.pinned), pinned: true }] : []),
+          ...groupByDay(items.filter((n) => !n.pinned), time.dayLabel)
+        ].map((group) => (
+          <section key={group.label} className="day" data-pinned={group.pinned || undefined}>
             <h2 className="day-label">{group.label}</h2>
             <ol className="items">
               {group.items.map((n) => (
@@ -126,6 +131,9 @@ export default function Feed({
                         </button>
                       );
                     })}
+                    <button className="item-mark" data-active={n.pinned || undefined} onClick={() => onTogglePin(n)}>
+                      {t(n.pinned ? 'feed.unpin' : 'feed.pin')}
+                    </button>
                     {!n.read && (
                       <button className="item-mark" onClick={() => onMarkRead(n)}>
                         {t('feed.markRead')}

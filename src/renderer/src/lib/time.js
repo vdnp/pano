@@ -27,5 +27,12 @@ export function createTimeFormat({ locale, t }) {
 
   const clock = (ts) => new Date(ts).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
-  return { relativeTime, dayLabel, clock };
+  // Kısa tarih + saat (ör. "Pzt 20 Eki 09:00"): zamanlanmış çalışma önizlemesi gibi dar yerler için
+  const shortDateTime = (ts) =>
+    `${new Date(ts).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })} ${clock(ts)}`;
+
+  // Tam tarih + saat (ör. ipucu metni)
+  const fullDateTime = (ts) => new Date(ts).toLocaleString(locale);
+
+  return { relativeTime, dayLabel, clock, shortDateTime, fullDateTime };
 }

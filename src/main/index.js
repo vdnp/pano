@@ -195,6 +195,21 @@ function registerIpc() {
     core.notifications.markAllRead(source ? String(source) : undefined, job ? String(job) : undefined)
   );
   handle('notifications:clear', (source) => core.notifications.clear(source ? String(source) : undefined));
+  handle('notifications:setPinned', (id, pinned) => core.notifications.setPinned(String(id), Boolean(pinned)));
+
+  // Otomasyon: kural doğrulaması core'da (normalizeRule); burada yalnızca düz nesne olduğundan emin olunur
+  const plain = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  handle('automation:list', () => core.automation.list());
+  handle('automation:save', (rule) => core.automation.save(plain(rule)));
+  handle('automation:remove', (id) => core.automation.remove(String(id)));
+  handle('automation:setEnabled', (id, enabled) => core.automation.setEnabled(String(id), Boolean(enabled)));
+  handle('automation:test', (rule, notificationId) =>
+    core.automation.test(plain(rule), notificationId ? String(notificationId) : null)
+  );
+  handle('automation:templates', () => core.automation.templates());
+  handle('automation:approvals', () => core.automation.approvals());
+  handle('automation:approve', (id) => core.automation.approve(String(id)));
+  handle('automation:reject', (id) => core.automation.reject(String(id)));
 
   handle('sources:list', () => core.sources.list());
   handle('sources:runNow', (key) => core.sources.runNow(String(key)));
@@ -247,6 +262,7 @@ function forwardEvents() {
   core.bus.on('command:started', (info) => send('commands:started', info));
   core.bus.on('command:progress', (info) => send('commands:progress', info));
   core.bus.on('command:finished', (info) => send('commands:finished', info));
+  core.bus.on('automation:changed', () => send('automation:changed'));
   core.bus.on('app:settingsChanged', () => {
     applyLocale();
     send('appSettings:changed', appSettingsPayload());
@@ -366,6 +382,29 @@ function setupDesktopNotifications() {
     clearTimeout(timer);
     timer = setTimeout(flush, 1500);
   });
+
+  // Otomasyonun "sesli uyarı" komutu: sistem sesiyle masaüstü bildirimi (duraklatılmışsa gösterilmez)
+  core.bus.on('app:alert', ({ title, body }) => {
+    if (core.getAppSettings().pauseNotifications || !Notification.isSupported()) return;
+    const toast = new Notification({ title: String(title).slice(0, 200), body: String(body ?? '').slice(0, 200), silent: false });
+    toast.on('click', focusWindow);
+    toast.show();
+  });
+
+  // Onay isteyen komut: duraklatılmış olsa da gösterilir (yoksa onay hiç gelmeden süresi dolar).
+  // Windows'ta bildirim düğmesi desteklenmediği için tıklama uygulamadaki onay listesini açar.
+  core.bus.on('automation:approval', (entry) => {
+    if (!Notification.isSupported()) return;
+    const toast = new Notification({
+      title: i18n.t('core.automation.approval.title'),
+      body: i18n.t('core.automation.approval.body', { rule: entry.ruleName, command: entry.commandText }).slice(0, 200)
+    });
+    toast.on('click', () => {
+      focusWindow();
+      send('automation:show');
+    });
+    toast.show();
+  });
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -417,9 +456,21 @@ if (!app.requestSingleInstanceLock()) {
   // Uygulama tepside yaşamaya devam eder; çıkış yalnızca tepsi menüsünden
   app.on('window-all-closed', () => {});
 
-  app.on('before-quit', () => {
+  // Çekirdeğin kapanışı beklenir (süren işler kapanmış veritabanına yazmasın); en fazla 5 sn
+  let stopped = false;
+  app.on('before-quit', (event) => {
     isQuitting = true;
-    core?.stop();
+    if (!core || stopped) return;
+    event.preventDefault();
+    if (stopped === null) return;
+    stopped = null;
+    const timeout = new Promise((resolve) => setTimeout(resolve, 5000));
+    Promise.race([core.stop(), timeout])
+      .catch((err) => console.warn('Kapanış hatası:', err?.message ?? err))
+      .finally(() => {
+        stopped = true;
+        app.quit();
+      });
   });
 
   app.on('will-quit', () => globalShortcut.unregisterAll());

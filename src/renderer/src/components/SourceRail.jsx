@@ -28,7 +28,8 @@ function summaryText(jobs, t) {
 }
 
 export default function SourceRail({
-  sources, counts, selection, view, onSelect, onShowPanel, onShowHistory, onRunNow, onOpenSettings, onOpenAppSettings, now
+  sources, counts, selection, view, onSelect, onShowPanel, onShowHistory, onShowAutomations, approvalCount = 0,
+  onRunNow, onOpenSettings, onOpenAppSettings, now
 }) {
   const i18n = useI18n();
   const { t } = i18n;
@@ -37,7 +38,7 @@ export default function SourceRail({
     <aside className="rail">
       <div className="brand">
         <span className="brand-mark" aria-hidden="true" />
-        Pano
+        {t('app.name')}
       </div>
 
       {/* Ana alanın görünümü: eklenti kartlarından oluşan Panel ya da bildirim akışı */}
@@ -63,6 +64,15 @@ export default function SourceRail({
           onClick={onShowHistory}
         >
           <span>{t('nav.history')}</span>
+        </button>
+        <button
+          className="rail-all"
+          aria-current={view === 'automations' ? 'true' : undefined}
+          onClick={onShowAutomations}
+        >
+          <span>{t('nav.automations')}</span>
+          {/* Onay bekleyen otomasyon komutları */}
+          {approvalCount > 0 && <span className="count">{approvalCount}</span>}
         </button>
       </nav>
 

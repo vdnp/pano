@@ -11,9 +11,8 @@ export function useCommands() {
   const [runs, setRuns] = useState([]);
   const timers = useRef(new Map());
 
-  const refresh = useCallback(async () => {
-    setCommands(await api.commands.list());
-  }, []);
+  // Olay dinleyicisi olarak da çağrılır; kapanış sırasında IPC reddedilebilir
+  const refresh = useCallback(() => api.commands.list().then(setCommands).catch(() => {}), []);
 
   const dismiss = useCallback((runId) => {
     clearTimeout(timers.current.get(runId));
@@ -24,18 +23,26 @@ export function useCommands() {
   useEffect(() => {
     refresh();
     // Pencere yeniden yüklendiyse hâlâ çalışanlar
-    api.commands.running().then((list) => setRuns((current) => (current.length ? current : list.map((r) => ({ ...r, status: 'running' })))));
+    api.commands.running().then((list) => setRuns((current) => (current.length ? current : list.filter((r) => r.origin !== 'automation').map((r) => ({ ...r, status: 'running' })))))
+      .catch(() => {});
 
     const update = (runId, patch) =>
       setRuns((list) => list.map((r) => (r.runId === runId ? { ...r, ...patch } : r)));
     const off = [
       // Ayar değişince komut listesi değişebilir (ör. ayara bağlı komutlar)
       api.on('sources:changed', refresh),
-      api.on('commands:started', (info) =>
-        setRuns((list) => [...list.filter((r) => r.runId !== info.runId), { ...info, status: 'running', progress: null, message: '' }])
-      ),
+      // Otomasyonun arka planda çalıştırdığı komutlar köşeyi doldurmasın: yalnızca hataları görünür
+      // (başarılılar Geçmiş'te ve Otomasyonlar'daki "son çalışma" satırında)
+      api.on('commands:started', (info) => {
+        if (info.origin === 'automation') return;
+        setRuns((list) => [...list.filter((r) => r.runId !== info.runId), { ...info, status: 'running', progress: null, message: '' }]);
+      }),
       api.on('commands:progress', ({ runId, progress, message }) => update(runId, { progress, message })),
       api.on('commands:finished', (info) => {
+        if (info.origin === 'automation') {
+          if (info.status === 'error') setRuns((list) => [...list, { ...info, message: '' }]);
+          return;
+        }
         update(info.runId, { ...info, resultMessage: info.message, message: '' });
         if (info.status !== 'error') timers.current.set(info.runId, setTimeout(() => dismiss(info.runId), KEEP_MS));
       })

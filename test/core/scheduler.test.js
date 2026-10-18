@@ -204,4 +204,24 @@ describe('scheduler', () => {
     expect(job.fn).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('drain: süren çalışmanın bitmesini bekler; süre dolarsa false döner', async () => {
+    const { scheduler } = setup();
+    expect(await scheduler.drain(100)).toBe(true);
+
+    const job = deferredJob();
+    scheduler.add('demo/a', job.fn, MINUTE);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(job.fn).toHaveBeenCalledTimes(1);
+    scheduler.stopAll();
+
+    const late = scheduler.drain(500);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await late).toBe(false);
+
+    const waiting = scheduler.drain(5000);
+    job.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await waiting).toBe(true);
+  });
 });

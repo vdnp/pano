@@ -47,6 +47,21 @@ export default {
         outOfRange: '"{param}" must be between {min} and {max}.'
       },
       builtin: {
+        notify: 'Create a Pano notification',
+        notifyDone: 'Notification created.',
+        alert: 'Show a desktop alert with sound',
+        alertDone: 'Alert shown.',
+        pin: 'Pin notification to the top',
+        pinDone: 'Notification pinned.',
+        unpin: 'Unpin notification',
+        unpinDone: 'Notification unpinned.',
+        notificationNotFound: 'Notification not found; it may have been deleted.',
+        params: {
+          title: 'Title',
+          body: 'Details',
+          level: 'Level',
+          id: 'Notification ID'
+        },
         runAll: 'Check all sources',
         runAllDone: { one: '{count} source checked.', other: '{count} sources checked.' },
         runAllFailed: { one: '{count} source checked, {failed} failed.', other: '{count} sources checked, {failed} failed.' },
@@ -61,6 +76,42 @@ export default {
         openExternal: 'Open links',
         runCommand: 'Run other commands'
       }
+    },
+    automation: {
+      rateThrottled: { one: 'Rate limit: {count} run skipped (at most {limit} per minute).', other: 'Rate limit: {count} runs skipped (at most {limit} per minute).' },
+      interrupted: 'Interrupted because the app was closed.',
+      tag: 'Automation',
+      rateLimited: {
+        title: 'The "{name}" automation was turned off',
+        body: 'The rule ran more than {count} times in a minute; there may be a loop. Check the rule and turn it back on in Automations.'
+      },
+      approval: {
+        title: 'An automation is waiting for approval',
+        body: '{rule}: {command}. Click to approve or reject.',
+        rejected: 'Approval was rejected; the command did not run.',
+        expired: 'No approval within 15 minutes; the command did not run.'
+      },
+      templates: {
+        reviewAlert: 'Alert with sound when a review is requested',
+        pinPatch: 'Pin the notification when a game I follow gets a patch',
+        morningCheck: 'Check all sources every weekday morning'
+      },
+      errors: {
+        invalid: 'The rule could not be read.',
+        notFound: 'Rule not found.',
+        noName: 'Give the rule a name.',
+        badTrigger: 'Choose a trigger.',
+        badCron: 'Invalid cron expression: "{cron}". Example: 0 9 * * 1-5 (weekdays at 09:00).',
+        badField: 'Condition {index} has an invalid field: {field}',
+        badOp: 'Condition {index} has an invalid comparison: {op}',
+        emptyValue: 'Condition {index} has no value.',
+        badPattern: 'Condition {index} has an invalid regular expression or one longer than 200 characters.',
+        badCommand: 'Choose a command for action {index}.',
+        noActions: 'Add at least one action.',
+        tooManyConditions: 'At most {max} conditions can be added.',
+        tooManyActions: 'At most {max} actions can be added.',
+        tooManyRules: 'At most {max} rules can be created.'
+      }
     }
   },
 
@@ -70,11 +121,16 @@ export default {
     yesterday: 'Yesterday'
   },
 
+  app: {
+    name: 'Pano'
+  },
+
   nav: {
     label: 'View',
     panel: 'Dashboard',
     notifications: 'Notifications',
-    history: 'History'
+    history: 'History',
+    automations: 'Automations'
   },
 
   dashboard: {
@@ -125,6 +181,9 @@ export default {
   },
 
   feed: {
+    pinned: 'Pinned',
+    pin: 'Pin',
+    unpin: 'Unpin',
     title: 'Notifications',
     unread: { one: '{count} unread', other: '{count} unread' },
     allRead: 'All read',
@@ -218,6 +277,110 @@ export default {
   },
 
 
+
+  automations: {
+    title: 'Automations',
+    subtitle: { one: '{count} rule', other: '{count} rules' },
+    new: 'New rule',
+    fromTemplate: 'Start from a template',
+    templatesLabel: 'Templates',
+    empty: 'No automations yet. Create a new rule or start from a template.',
+    toggleLabel: 'Turn {name} on or off',
+    edit: 'Edit',
+    delete: 'Delete',
+    deleteConfirm: 'Delete the "{name}" rule?',
+    trigger: {
+      notification: 'When a notification arrives',
+      schedule: 'Scheduled · {cron}',
+      app: 'When the app starts'
+    },
+    conditionCount: { one: '{count} condition', other: '{count} conditions' },
+    actionCount: { one: '{count} action', other: '{count} actions' },
+    nextRun: 'Next: {at, date} {at, time}',
+    neverRun: 'Has not run yet',
+    lastRun: 'Last run {when}',
+    status: {
+      ok: 'Done',
+      error: 'Error',
+      skipped: 'Did not run',
+      running: 'Running'
+    },
+    disabledRateLimit: 'Turned off automatically because it exceeded {count} runs per minute.',
+    approvals: {
+      title: 'Waiting for approval',
+      body: '{rule} → {command}',
+      approve: 'Approve',
+      reject: 'Reject',
+      expires: 'Cancelled at {at, time}'
+    },
+    editor: {
+      titleNew: 'New rule',
+      titleEdit: 'Edit rule',
+      name: 'Rule name',
+      enabled: 'Rule is on',
+      step1: '1. Trigger',
+      step2: '2. Conditions',
+      step3: '3. Actions',
+      triggerNotification: 'When a new notification arrives',
+      triggerSchedule: 'At set times',
+      triggerApp: 'When the app starts',
+      preset: 'Frequency',
+      presets: {
+        weekdayMorning: 'Every weekday at 09:00',
+        everyHour: 'Every hour',
+        everyEvening: 'Every day at 18:00',
+        custom: 'Custom (cron expression)'
+      },
+      cron: 'Cron expression',
+      cronHelp: 'minute · hour · day of month · month · day of week (e.g. 0 9 * * 1-5)',
+      nextRuns: 'Next runs',
+      conditionsHelp: 'Runs when all conditions match. Without conditions it runs for every new notification.',
+      conditionsOnlyNotification: 'Conditions are only used with the notification trigger.',
+      addCondition: 'Add condition',
+      removeCondition: 'Remove condition',
+      field: 'Field',
+      op: 'Comparison',
+      value: 'Value',
+      inHelp: 'Separate multiple values with commas.',
+      ops: {
+        eq: 'equals',
+        neq: 'does not equal',
+        contains: 'contains',
+        matches: 'matches regular expression',
+        in: 'is one of'
+      },
+      fields: {
+        source: 'Source',
+        level: 'Level',
+        title: 'Title',
+        body: 'Details (game, feed, repo)',
+        url: 'Address',
+        job: 'Source job',
+        tags: 'Tag'
+      },
+      addAction: 'Add action',
+      removeAction: 'Remove action',
+      command: 'Command',
+      chooseCommand: 'Choose a command',
+      templateHelp: 'You can fill fields with values from the triggering event: {fields}',
+      noParams: 'This command takes no parameters.',
+      confirmWarning: 'This command needs approval: when run by an automation you will be asked with a desktop notification.',
+      save: 'Save',
+      cancel: 'Cancel',
+      close: 'Close',
+      test: 'Try',
+      testHelp: 'Try the rule with a notification from the feed. No command is run.',
+      chooseNotification: 'Choose a notification',
+      noNotifications: 'There are no notifications in the feed to try with.',
+      matched: 'The rule runs for this notification.',
+      notMatched: 'The rule does not run for this notification.',
+      wouldRun: 'Actions that would run',
+      actual: 'actual value: {value}',
+      emptyValue: '(empty)',
+      needsConfirm: 'needs approval'
+    }
+  },
+
   palette: {
     label: 'Command palette',
     placeholder: 'Search commands…',
@@ -239,6 +402,7 @@ export default {
     back: 'Back',
     listUnsupported: 'This command needs a list parameter; it cannot be run from the palette.',
     ui: {
+      automations: 'Open automations',
       panel: 'Go to dashboard',
       notifications: 'Go to notifications',
       history: 'Open command history',
@@ -271,6 +435,7 @@ export default {
       cancelled: 'Cancelled'
     },
     origin: {
+      automation: 'Automation: {name}',
       palette: 'Palette',
       history: 'History',
       notification: 'Notification',

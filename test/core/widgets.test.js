@@ -109,11 +109,11 @@ describe('kartlar: core üzerinden', () => {
     delete globalThis.__widgetCalls;
   });
 
-  it('kart tanımlarını düz bilgi olarak listeler, ayara göre kart ekler', () => {
+  it('kart tanımlarını düz bilgi olarak listeler, ayara göre kart ekler', async () => {
     expect(core.widgets.list().map((w) => [w.id, w.view, w.size])).toEqual([
       ['kart/ozet', 'stat', 'normal'], ['kart/bozuk', 'stat', 'normal'], ['kart/gecersiz', null, 'normal'], ['kart/kaynaksiz', 'list', 'normal']
     ]);
-    core.sources.updateSettings('kart', { genis: true });
+    await core.sources.updateSettings('kart', { genis: true });
     expect(core.widgets.list().at(-1)).toMatchObject({ id: 'kart/genis', size: 'wide' });
   });
 
@@ -139,7 +139,7 @@ describe('kartlar: core üzerinden', () => {
     await expect(core.widgets.data('yok')).rejects.toThrow('Kart bulunamadı: yok');
   });
 
-  it('panel düzeni: yeni kartlar sona görünür eklenir, sıra ve görünürlük saklanır', () => {
+  it('panel düzeni: yeni kartlar sona görünür eklenir, sıra ve görünürlük saklanır', async () => {
     expect(core.dashboard.get().cards.map((c) => c.id)).toEqual(['kart/ozet', 'kart/bozuk', 'kart/gecersiz', 'kart/kaynaksiz']);
 
     core.dashboard.set({ cards: [
@@ -150,26 +150,26 @@ describe('kartlar: core üzerinden', () => {
       { id: 'kart/bozuk', visible: true }, { id: 'kart/gecersiz', visible: true }
     ]);
 
-    core.sources.updateSettings('kart', { genis: true });
+    await core.sources.updateSettings('kart', { genis: true });
     expect(core.dashboard.get().cards.at(-1)).toEqual({ id: 'kart/genis', visible: true });
   });
 
-  it('hidden kart düzene gizli eklenir; kullanıcı açınca açık kalır', () => {
-    core.sources.updateSettings('kart', { gizli: true });
+  it('hidden kart düzene gizli eklenir; kullanıcı açınca açık kalır', async () => {
+    await core.sources.updateSettings('kart', { gizli: true });
     expect(core.widgets.list().at(-1)).toMatchObject({ id: 'kart/gizli', hidden: true });
     expect(core.dashboard.get().cards.at(-1)).toEqual({ id: 'kart/gizli', visible: false });
     core.dashboard.set({ cards: [{ id: 'kart/gizli', visible: true }] });
     expect(core.dashboard.get().cards[0]).toEqual({ id: 'kart/gizli', visible: true });
   });
 
-  it('şu an olmayan kartın sırası depoda korunur', () => {
-    core.sources.updateSettings('kart', { genis: true });
+  it('şu an olmayan kartın sırası depoda korunur', async () => {
+    await core.sources.updateSettings('kart', { genis: true });
     core.dashboard.set({ cards: [{ id: 'kart/genis', visible: false }, { id: 'kart/ozet', visible: true }] });
-    core.sources.updateSettings('kart', { genis: false });
+    await core.sources.updateSettings('kart', { genis: false });
     expect(core.dashboard.get().cards.some((c) => c.id === 'kart/genis')).toBe(false);
     // Başka bir değişiklik kaydedilse de gizli kartın tercihi kaybolmaz
     core.dashboard.set({ cards: [{ id: 'kart/ozet', visible: false }] });
-    core.sources.updateSettings('kart', { genis: true });
+    await core.sources.updateSettings('kart', { genis: true });
     expect(core.dashboard.get().cards.find((c) => c.id === 'kart/genis')).toEqual({ id: 'kart/genis', visible: false });
   });
 });

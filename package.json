@@ -23,6 +23,7 @@
   "dependencies": {
     "@fontsource/chakra-petch": "^5.0.0",
     "@fontsource/manrope": "^5.0.0",
+    "croner": "10.0.1",
     "fast-xml-parser": "^5.11.2"
   },
   "devDependencies": {

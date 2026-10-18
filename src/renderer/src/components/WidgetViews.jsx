@@ -67,7 +67,7 @@ function ListView({ data }) {
         return (
           <li key={i}>
             {item.url ? (
-              <button className="wlist-row" onClick={() => api.openExternal(item.url)}>{body}</button>
+              <button className="wlist-row" onClick={() => api.openExternal(item.url).catch(() => {})}>{body}</button>
             ) : (
               <div className="wlist-row">{body}</div>
             )}
@@ -111,7 +111,7 @@ function ProfileView({ data }) {
         </dl>
       )}
       {data.url && (
-        <button className="link wprofile-link" onClick={() => api.openExternal(data.url)}>
+        <button className="link wprofile-link" onClick={() => api.openExternal(data.url).catch(() => {})}>
           {t('card.openProfile')} <ExternalIcon />
         </button>
       )}

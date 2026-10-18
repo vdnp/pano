@@ -8,17 +8,20 @@ export function usePano() {
   const [appSettings, setAppSettings] = useState(null);
   const [ready, setReady] = useState(false);
 
-  const refreshNotifications = useCallback(async () => {
-    setNotifications(await api.notifications.list());
-  }, []);
+  // Olay dinleyicisi olarak da çağrılır; kapanış sırasında IPC reddedilebilir, sonraki olayda yenilenir
+  const refreshNotifications = useCallback(
+    () => api.notifications.list().then(setNotifications).catch(() => {}),
+    []
+  );
 
-  const refreshSources = useCallback(async () => {
-    setSources(await api.sources.list());
-  }, []);
+  const refreshSources = useCallback(
+    () => api.sources.list().then(setSources).catch(() => {}),
+    []
+  );
 
   useEffect(() => {
     Promise.all([refreshNotifications(), refreshSources()]).then(() => setReady(true));
-    api.appSettings.get().then(setAppSettings);
+    api.appSettings.get().then(setAppSettings).catch((err) => console.warn('[pano] uygulama ayarları alınamadı', err));
     const off = [
       api.on('notifications:changed', refreshNotifications),
       api.on('sources:changed', refreshSources),

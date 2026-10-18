@@ -12,7 +12,8 @@ export default function HistoryView({ commands, onRerun, now }) {
   const [entries, setEntries] = useState(null);
 
   useEffect(() => {
-    const load = async () => setEntries(await api.commands.history());
+    // Kapanış sırasında IPC reddedilebilir; geçmiş bir sonraki olayda yeniden yüklenir
+    const load = () => api.commands.history().then(setEntries).catch(() => {});
     load();
     return api.on('commands:finished', load);
   }, []);
@@ -28,10 +29,7 @@ export default function HistoryView({ commands, onRerun, now }) {
         </div>
         {entries?.length > 0 && (
           <div className="feed-tools">
-            <button className="btn" onClick={async () => {
-              await api.commands.clearHistory();
-              setEntries([]);
-            }}>
+            <button className="btn" onClick={() => api.commands.clearHistory().then(() => setEntries([])).catch(() => {})}>
               {t('history.clear')}
             </button>
           </div>
@@ -54,8 +52,8 @@ export default function HistoryView({ commands, onRerun, now }) {
                   {params && <span className="history-params" title={params}>{params}</span>}
                   {result && <span className="history-result">{result}</span>}
                   <span className="history-meta">
-                    {t(`history.status.${e.status}`)} · {t(`history.origin.${e.origin}`)} ·{' '}
-                    <time dateTime={new Date(e.startedAt).toISOString()} title={new Date(e.startedAt).toLocaleString(i18n.locale)}>
+                    {t(`history.status.${e.status}`)} · {t(`history.origin.${e.origin}`, { name: e.originLabel ?? '' })} ·{' '}
+                    <time dateTime={new Date(e.startedAt).toISOString()} title={time.fullDateTime(e.startedAt)}>
                       {time.relativeTime(e.startedAt, now)}
                     </time>{' '}
                     · {t('history.duration', { seconds: Math.round(e.duration / 100) / 10 })}

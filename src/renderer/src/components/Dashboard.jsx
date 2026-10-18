@@ -44,7 +44,9 @@ export default function Dashboard({ sourceNames, now }) {
     let timer = null;
     let last = '';
     const load = async () => {
-      const [list, saved] = await Promise.all([api.widgets.list(), api.dashboard.get()]);
+      // Kapanış sırasında IPC reddedilebilir; panel bir sonraki olayda yeniden yüklenir
+      const [list, saved] = await Promise.all([api.widgets.list(), api.dashboard.get()]).catch(() => []);
+      if (!list) return;
       const key = JSON.stringify([list, saved]);
       if (key === last) return; // kaynak durum olayları sık gelir; değişmediyse yeniden çizme
       last = key;
@@ -70,7 +72,11 @@ export default function Dashboard({ sourceNames, now }) {
   const spans = layoutSpans(visible, cols);
   const save = async (next) => {
     setLayout(next);
-    setLayout(await api.dashboard.set(next));
+    try {
+      setLayout(await api.dashboard.set(next));
+    } catch {
+      /* kaydedilemezse düzen yalnızca bu oturumda geçerli kalır */
+    }
   };
 
   // Düzenle modunda hem ızgaradaki kartlar hem listedeki satırlar sürüklenir. Klavye için

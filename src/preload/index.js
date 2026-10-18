@@ -2,7 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const EVENTS = new Set([
   'notifications:changed', 'sources:changed', 'appSettings:changed',
-  'commands:started', 'commands:progress', 'commands:finished', 'palette:open'
+  'commands:started', 'commands:progress', 'commands:finished', 'palette:open',
+  'automation:changed', 'automation:show'
 ]);
 const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
 
@@ -15,6 +16,7 @@ contextBridge.exposeInMainWorld('pano', {
     setContent: invoke('notifications:setContent'),
     fetchContent: invoke('notifications:fetchContent'),
     markAllRead: invoke('notifications:markAllRead'),
+    setPinned: invoke('notifications:setPinned'),
     clear: invoke('notifications:clear')
   },
   sources: {
@@ -49,6 +51,17 @@ contextBridge.exposeInMainWorld('pano', {
     clearHistory: invoke('commands:clearHistory'),
     suggest: invoke('commands:suggest'),
     runForNotification: invoke('commands:runForNotification')
+  },
+  automation: {
+    list: invoke('automation:list'),
+    save: invoke('automation:save'),
+    remove: invoke('automation:remove'),
+    setEnabled: invoke('automation:setEnabled'),
+    test: invoke('automation:test'),
+    templates: invoke('automation:templates'),
+    approvals: invoke('automation:approvals'),
+    approve: invoke('automation:approve'),
+    reject: invoke('automation:reject')
   },
   openExternal: invoke('app:openExternal'),
 

@@ -26,7 +26,9 @@ function normalize(raw) {
     read: false,
     meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},
     // Bildirimi üreten kaynak işi (ör. news-730); core yazar, arayüz filtrelemede kullanır
-    job: raw.job ? String(raw.job) : null
+    job: raw.job ? String(raw.job) : null,
+    // Sabitlenmiş bildirim akışta üstte durur (kullanıcı ya da otomasyon sabitler)
+    pinned: false
   };
 }
 
@@ -37,6 +39,7 @@ export function restoreNotification(raw) {
   return {
     ...item,
     read: raw.read === true,
+    pinned: raw.pinned === true,
     receivedAt: Number.isFinite(raw.receivedAt) ? raw.receivedAt : item.createdAt
   };
 }
@@ -62,8 +65,9 @@ export function createNotificationStore(storage, bus) {
       return true;
     },
 
-    // Aynı id daha önce geldiyse false döner (tekrar göstermez).
-    add(raw) {
+    // Aynı id daha önce geldiyse false döner (tekrar göstermez). causedBy: bildirimi doğuran komut
+    // çalıştırmasının kimliği (otomasyonun döngü önlemesi için; bildirimde saklanmaz)
+    add(raw, { causedBy = null } = {}) {
       if (repo.has(String(raw.id))) return false;
       const item = normalize(raw);
       const content = normalizeContent(raw.content);
@@ -77,7 +81,7 @@ export function createNotificationStore(storage, bus) {
         return kept;
       });
       if (!kept) return false;
-      bus.emit('notification:new', item);
+      bus.emit('notification:new', item, { causedBy: causedBy ? String(causedBy) : null });
       changed();
       return true;
     },
@@ -88,6 +92,13 @@ export function createNotificationStore(storage, bus) {
         for (const id of Array.isArray(ids) ? ids : [ids]) repo.markRead(String(id));
       });
       changed();
+    },
+
+    // Bildirim yoksa false
+    setPinned(id, pinned) {
+      const ok = repo.setPinned(String(id), Boolean(pinned));
+      if (ok) changed();
+      return ok;
     },
 
     // job verilirse yalnızca o işin (ör. tek bir oyunun) bildirimleri

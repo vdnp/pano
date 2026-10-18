@@ -240,8 +240,12 @@ export default function SettingsPanel({ source, onClose }) {
   }
 
   async function removeSecret(key) {
-    await api.sources.setSecret(source.name, key, '');
-    setMessage({ type: 'ok', text: t('settings.secretRemoved') });
+    try {
+      await api.sources.setSecret(source.name, key, '');
+      setMessage({ type: 'ok', text: t('settings.secretRemoved') });
+    } catch (err) {
+      setMessage({ type: 'error', text: ipcMessage(err) });
+    }
   }
 
   let fieldIndex = 0;
@@ -287,7 +291,7 @@ export default function SettingsPanel({ source, onClose }) {
                 {schema.help && <p className="help">{txt(`secrets.${key}.help`, schema.help)}</p>}
                 <div className="field-links">
                   {schema.helpUrl && (
-                    <button type="button" className="link" onClick={() => api.openExternal(schema.helpUrl)}>
+                    <button type="button" className="link" onClick={() => api.openExternal(schema.helpUrl).catch(() => {})}>
                       {t('settings.openKeyPage')}
                     </button>
                   )}

@@ -180,6 +180,15 @@ export const migrations = [
       );
       CREATE INDEX command_history_started_at ON command_history (started_at);
     `);
+  },
+
+  // 9: otomasyon. Bildirim sabitlenebilir (akışta üstte, 500 sınırında silinmez); komut
+  // geçmişinde kaynağın açıklaması (ör. otomasyonun kural adı)
+  (db) => {
+    db.exec(`
+      ALTER TABLE notifications ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE command_history ADD COLUMN origin_label TEXT;
+    `);
   }
 ];
 

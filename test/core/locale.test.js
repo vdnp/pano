@@ -64,16 +64,16 @@ describe('çok dilli core', () => {
     });
   });
 
-  it('dil değişince core mesajları yeni dilde üretilir', () => {
+  it('dil değişince core mesajları yeni dilde üretilir', async () => {
     expect(find('bozuk').startError).toBe('The plugin could not start: ayar yok. Fix the problem and restart Pano.');
     expect(find('bozuk').startErrorI18n).toEqual({ key: 'core.errors.startFailed', params: { error: 'ayar yok' } });
 
-    core.setLocale('tr');
+    await core.setLocale('tr');
     expect(core.getLocale()).toBe('tr');
     expect(find('bozuk').startError).toBe("Eklenti başlatılamadı: ayar yok. Sorunu giderip Pano'yu yeniden başlat.");
-    expect(() => core.sources.updateSettings('yok', {})).toThrow('Eklenti bulunamadı: yok');
+    await expect(core.sources.updateSettings('yok', {})).rejects.toThrow('Eklenti bulunamadı: yok');
 
-    core.setLocale('de'); // desteklenmeyen dil yok sayılır
+    await core.setLocale('de'); // desteklenmeyen dil yok sayılır
     expect(core.getLocale()).toBe('tr');
   });
 });

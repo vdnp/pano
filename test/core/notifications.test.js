@@ -52,7 +52,8 @@ describe('notifications', () => {
         receivedAt: NOW,
         read: false,
         meta: { k: 1 },
-        job: null
+        job: null,
+        pinned: false
       });
     });
 
