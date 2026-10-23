@@ -3,6 +3,7 @@ import { api } from '../lib/usePano.js';
 import { CloseIcon } from './Icons.jsx';
 import { useI18n } from '../lib/i18n.jsx';
 import { pluginName, pluginText } from '../lib/plugin-text.js';
+import { permissionLines } from '../lib/permissions.js';
 import { ipcMessage } from '../lib/ipc.js';
 
 const MAX_LIST_ITEMS = 50;
@@ -215,6 +216,65 @@ export default function SettingsPanel({ source, onClose }) {
   }, [onClose]);
 
   const failing = source.jobs.filter((j) => j.state === 'error');
+  const permissions = permissionLines(i18n, source, source.permissions, source.consent?.added);
+
+  // Onay ver: eklenti başlar (kodu ilk kez o an yüklenir)
+  async function approve() {
+    setSaving(true);
+    try {
+      await api.sources.approvePlugin(source.name);
+    } catch (err) {
+      setMessage({ type: 'error', text: ipcMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function revoke() {
+    if (!window.confirm(t('consent.revokeConfirm', { name: pluginName(i18n, source) }))) return;
+    try {
+      await api.sources.revokePlugin(source.name);
+    } catch (err) {
+      setMessage({ type: 'error', text: ipcMessage(err) });
+    }
+  }
+
+  // Onay bekleyen eklenti: ayar formu yerine istediği izinler ve karar düğmeleri
+  if (source.consent) {
+    return (
+      <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        <aside className="panel" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+          <header className="panel-header">
+            <div>
+              <h2 id="consent-title">{t('consent.title', { name: pluginName(i18n, source) })}</h2>
+              {source.description && <p className="panel-desc">{txt('description', source.description)}</p>}
+            </div>
+            <button className="icon-btn" onClick={onClose} aria-label={t('settings.close')}>
+              <CloseIcon />
+            </button>
+          </header>
+          <p className="help">{t(source.consent.status === 'changed' ? 'consent.changed' : 'consent.intro')}</p>
+          {permissions.length === 0 ? (
+            <p className="help">{t('consent.none')}</p>
+          ) : (
+            <ul className="consent-list">
+              {permissions.map((p) => (
+                <li key={p.key} data-new={(p.isNew && source.consent.status === 'changed') || undefined}>
+                  {p.text}
+                  {p.isNew && source.consent.status === 'changed' && <span className="consent-new">{t('consent.isNew')}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {message && <p className="notice notice-error" role="alert">{message.text}</p>}
+          <div className="panel-actions">
+            <button type="button" className="btn" onClick={onClose}>{t('consent.later')}</button>
+            <button type="button" className="btn btn-primary" ref={firstField} onClick={approve} disabled={saving}>{t('consent.approve')}</button>
+          </div>
+        </aside>
+      </div>
+    );
+  }
   const secretEntries = Object.entries(source.secretsSchema);
   const settingEntries = Object.entries(source.settingsSchema);
 
@@ -263,6 +323,18 @@ export default function SettingsPanel({ source, onClose }) {
             <CloseIcon />
           </button>
         </header>
+
+        {/* Başlatılamayan ya da art arda çöküp kapatılan eklenti: baştan kurmayı dene */}
+        {(source.startError || source.hostState === 'restarting') && (
+          <div className="notice notice-error restart-row" role="status">
+            <span>{source.startError ? t(source.startErrorI18n ?? source.startError) : t('settings.restarting')}</span>
+            {source.startError && (
+              <button type="button" className="btn" onClick={() => api.sources.restartPlugin(source.name).catch((err) => setMessage({ type: 'error', text: ipcMessage(err) }))}>
+                {t('settings.restartPlugin')}
+              </button>
+            )}
+          </div>
+        )}
 
         {failing.map((j) => (
           <p key={j.key} className="notice notice-error">
@@ -351,14 +423,19 @@ export default function SettingsPanel({ source, onClose }) {
           </div>
         </form>
 
-        {/* Eklentinin manifest'te beyan ettiği izinler (yalnızca bilgi) */}
-        {source.permissions?.length > 0 && (
+        {/* Eklentinin manifest'te beyan ettiği ve verilmiş izinler; uygulamayla gelmeyen eklentide geri alınabilir */}
+        {(permissions.length > 0 || !source.trusted) && (
           <section className="permissions" aria-labelledby="permissions-title">
             <h3 id="permissions-title">{t('settings.permissions')}</h3>
             <p className="help">{t('settings.permissionsHelp')}</p>
-            <ul>
-              {source.permissions.map((p) => <li key={p}>{t(`core.permissions.names.${p}`)}</li>)}
-            </ul>
+            {permissions.length === 0 ? <p className="help">{t('consent.none')}</p> : (
+              <ul>
+                {permissions.map((p) => <li key={p.key}>{p.text}</li>)}
+              </ul>
+            )}
+            {!source.trusted && (
+              <button type="button" className="link link-danger" onClick={revoke}>{t('consent.revoke')}</button>
+            )}
           </section>
         )}
       </aside>

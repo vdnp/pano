@@ -5,7 +5,12 @@ export default {
       pluginNotFound: 'Plugin not found: {name}',
       unknownSecret: 'Unknown secret field: {key}',
       unknownProvider: 'Unknown suggestion provider: {provider}',
-      startFailed: 'The plugin could not start: {error}. Fix the problem and restart Pano.'
+      startFailed: 'The plugin could not start: {error}. Fix the problem and restart Pano.',
+      pluginCrashed: 'The plugin crashed several times in a short period and was turned off. Use "Try again" in its settings to restart it.',
+      pluginRestarting: 'The plugin is restarting; try again in a few seconds.',
+      pluginDisposed: 'The plugin was closed.',
+      pluginLimit: 'The plugin exceeded an allowed limit: {what}.',
+      pluginBadRequest: 'The plugin sent an invalid request: {what}.'
     },
     xml: {
       entity: 'The document contains disallowed entity (ENTITY) declarations.',
@@ -74,7 +79,24 @@ export default {
       notInCommand: '"{permission}" can only be used while a command is running.',
       names: {
         openExternal: 'Open links',
-        runCommand: 'Run other commands'
+        runCommand: 'Run other commands',
+        network: 'Internet access',
+        notifications: 'Show notifications',
+        filesystem: 'Write files to its own data folder'
+      },
+      cannotRevokeBuiltin: 'Permissions of a plugin that ships with the app cannot be revoked.',
+      network: {
+        badUrl: 'Invalid address: {url}',
+        notDeclared: 'The {plugin} plugin did not request internet access; it cannot connect to {host}.',
+        hostNotAllowed: 'The {plugin} plugin did not request permission to connect to {host}.',
+        httpNotAllowed: '{host} can only be reached over a secure connection (https).',
+        privateAddress: '{host} is on the local network; plugins cannot connect to the local network.',
+        tooManyRedirects: '{host} redirected too many times.'
+      },
+      files: {
+        badPath: 'Invalid file path: {path}. Only paths inside the plugin\'s own folder can be used.',
+        quota: "The plugin's data folder is full (at most {mb} MB and {files} files).",
+        unavailable: 'The plugin data folder is not available in this environment.'
       }
     },
     automation: {
@@ -163,6 +185,7 @@ export default {
     all: 'All sources',
     empty: 'No plugins loaded yet. Add a plugin to the plugins folder.',
     status: {
+      consent: 'Waiting for approval',
       waiting: 'Waiting',
       running: 'Checking',
       lastCheck: 'Last checked {when}',
@@ -175,6 +198,7 @@ export default {
     runNowLabel: 'Check {name} now',
     settings: 'Settings',
     settingsLabel: '{name} settings',
+    review: 'Review and approve permissions',
     jobsLabel: '{name} sources',
     appSettings: 'App settings',
     fix: 'Open settings to fix'
@@ -227,6 +251,8 @@ export default {
   },
 
   settings: {
+    restartPlugin: 'Try again',
+    restarting: 'Restarting the plugin…',
     permissions: 'Permissions',
     permissionsHelp: 'Capabilities this plugin declares. They can only be used while a command is running.',
     title: '{name} settings',
@@ -378,6 +404,28 @@ export default {
       actual: 'actual value: {value}',
       emptyValue: '(empty)',
       needsConfirm: 'needs approval'
+    }
+  },
+
+
+  consent: {
+    title: '{name} requests these permissions',
+    intro: 'This plugin did not ship with the app. Its code does not run at all until you allow it. Review what it asks for and decide.',
+    changed: 'The plugin was updated and its permissions changed. New requests are marked.',
+    isNew: 'new',
+    approve: 'Allow and start',
+    later: 'Not now',
+    revoke: 'Revoke permissions and stop',
+    revokeConfirm: 'Revoke the permissions of {name}? The plugin stops and will ask again.',
+    none: 'This plugin requests no permissions.',
+    perm: {
+      network: 'Internet: {host}',
+      networkAny: 'Any address on the internet outside the local network',
+      networkFromSettings: 'Addresses you enter in its settings ({path})',
+      notifications: 'Show notifications',
+      openExternal: 'Open links in the browser or the related app',
+      runCommand: "Run other plugins' commands",
+      filesystem: 'Write files to its own data folder'
     }
   },
 

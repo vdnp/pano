@@ -4,7 +4,7 @@ import { createContext } from '../../core/context.js';
 import { createNotificationStore } from '../../core/notifications.js';
 import { createSecrets } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
-import { silentLogger } from '../helpers.js';
+import { TEST_PERMISSIONS, publicResolve, silentLogger } from '../helpers.js';
 
 function setup() {
   const storage = createSqliteStorage(':memory:');
@@ -13,7 +13,7 @@ function setup() {
   const secrets = createSecrets(store);
   const logger = silentLogger();
   const make = (name, settings = {}) =>
-    createContext(name, { notifications, store, secrets, logger, getSettings: () => settings });
+    createContext(name, { permissions: TEST_PERMISSIONS, resolveHost: publicResolve, notifications, store, secrets, logger, getSettings: () => settings });
   return { store, notifications, secrets, logger, make };
 }
 

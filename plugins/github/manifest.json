@@ -4,6 +4,14 @@
   "version": "0.1.0",
   "description": "Okunmamış GitHub bildirimlerini getirir.",
   "main": "index.js",
+  "permissions": {
+    "network": {
+      "hosts": [
+        "api.github.com"
+      ]
+    },
+    "notifications": true
+  },
   "settings": {
     "interval": {
       "type": "number",

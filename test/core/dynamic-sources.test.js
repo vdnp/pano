@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCore } from '../../core/index.js';
 import { plainCipher } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
-import { removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 const MANIFEST = {
   name: 'dyn',
@@ -41,7 +41,7 @@ describe('ayarlara göre değişen kaynaklar', () => {
     logger = silentLogger();
     pluginDir = tempDir('pano-dyn-');
     writePlugin(pluginDir, 'dyn', MANIFEST, PLUGIN_CODE);
-    core = createCore({
+    core = createCore({ resolveHost: publicResolve,
       pluginDirs: [pluginDir], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:')
     });
     await core.start();
@@ -98,7 +98,7 @@ describe('ayarlara göre değişen kaynaklar', () => {
 
     const other = tempDir('pano-nosetup-');
     writePlugin(other, 'duz', { name: 'duz' });
-    const plain = createCore({ pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
+    const plain = createCore({ resolveHost: publicResolve, pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
     await plain.start();
     expect(plain.sources.list()[0].setup).toBeNull();
     await plain.stop();
@@ -148,7 +148,7 @@ describe('ayarlara göre değişen kaynaklar', () => {
         setup() { throw new Error('yapılandırma dosyası yok'); },
         sources: { a: { title: 'A', run() {} } }
       };`);
-    const broken = createCore({ pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
+    const broken = createCore({ resolveHost: publicResolve, pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
     await broken.start();
 
     const [item] = broken.sources.list();
@@ -173,7 +173,7 @@ describe('ayarlara göre değişen kaynaklar', () => {
           'news-2': { title: 'İki', async run(ctx) { ctx.notify({ id: 'b', title: 'B' }); await wait(); ctx.notify({ id: 'c', title: 'C' }); } }
         }
       };`);
-    const games = createCore({ pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
+    const games = createCore({ resolveHost: publicResolve, pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
     await games.start();
 
     await Promise.all([games.sources.runNow('oyunlar/news-1'), games.sources.runNow('oyunlar/news-2')]);
@@ -202,7 +202,7 @@ describe('ayarlara göre değişen kaynaklar', () => {
       };`);
     writePlugin(other, 'duz', { name: 'duz' }, `
       export default { sources: { a: { title: 'A', run(ctx) { ctx.notify({ id: '1', title: 'Düz' }); } } } };`);
-    const c = createCore({ pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
+    const c = createCore({ resolveHost: publicResolve, pluginDirs: [other], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
     await c.start();
     await c.sources.runNow('kaynakli/a');
     await c.sources.runNow('duz/a');

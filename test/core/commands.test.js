@@ -4,7 +4,7 @@ import { plainCipher } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
 import { cleanSuggestion, MAX_HISTORY, redactParams } from '../../core/commands.js';
 import { validateParams } from '../../core/schema.js';
-import { removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 const TOOL = `
 export default {
@@ -137,10 +137,10 @@ describe('komutlar: core üzerinden', () => {
 
   beforeEach(async () => {
     dir = tempDir('pano-commands-');
-    writePlugin(dir, 'arac', { name: 'arac', permissions: ['openExternal', 'runCommand', 'uydurma'], settings: { extra: { type: 'boolean', default: false } } }, TOOL);
+    writePlugin(dir, 'arac', { name: 'arac', permissions: ['openExternal', 'runCommand', 'notifications', 'uydurma'], settings: { extra: { type: 'boolean', default: false } } }, TOOL);
     writePlugin(dir, 'izinsiz', { name: 'izinsiz' }, NO_PERMISSION);
     opened = vi.fn(async (url) => url.startsWith('https://'));
-    core = createCore({
+    core = createCore({ resolveHost: publicResolve,
       pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:'), openExternal: opened
     });
     await core.start();
@@ -252,8 +252,10 @@ describe('komutlar: core üzerinden', () => {
   describe('izinler', () => {
     it('beyan edilen izinler listelenir, bilinmeyen izin atılır', () => {
       const arac = core.sources.list().find((s) => s.name === 'arac');
-      expect(arac.permissions).toEqual(['openExternal', 'runCommand']);
-      expect(core.sources.list().find((s) => s.name === 'izinsiz').permissions).toEqual([]);
+      // Eski dizi biçimi çevrilir; okunur listede bilinmeyen izin yok
+      expect(arac.permissions).toEqual([{ kind: 'notifications' }, { kind: 'openExternal' }, { kind: 'runCommand' }]);
+      expect(core.sources.list().find((s) => s.name === 'izinsiz').permissions)
+        .toEqual([{ kind: 'networkAny', host: '*' }, { kind: 'notifications' }]);
     });
 
     it('izin beyan etmeyen eklenti anlaşılır hata alır', async () => {
@@ -321,7 +323,7 @@ describe('ayrılmış eklenti adı', () => {
     const dir = tempDir('pano-reserved-');
     writePlugin(dir, 'pano', { name: 'pano' }, 'export default { commands: { x: { run() {} } } };');
     const logger = silentLogger();
-    const core = createCore({ pluginDirs: [dir], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
+    const core = createCore({ resolveHost: publicResolve, pluginDirs: [dir], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:') });
     await core.start();
     expect(core.sources.list()).toEqual([]);
     expect(logger.error.mock.calls.flat().join(' ')).toContain('uygulamaya ayrılmış');

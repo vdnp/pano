@@ -6,7 +6,7 @@ import { plainCipher } from '../../core/secrets.js';
 import { createSqliteStorage, openStorage } from '../../core/storage/index.js';
 import { importLegacyJson } from '../../core/storage/legacy-json.js';
 import { migrate, migrations } from '../../core/storage/migrations.js';
-import { removeDir, silentLogger, tempDir } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir } from '../helpers.js';
 
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
 
@@ -334,7 +334,7 @@ describe('pano.json içe aktarma', () => {
 
   it('createCore aktarılan verilerle açılır', async () => {
     fs.writeFileSync(jsonFile(), JSON.stringify(LEGACY));
-    const core = createCore({ dataDir: dir, pluginDirs: [], cipher: plainCipher, logger });
+    const core = createCore({ resolveHost: publicResolve, dataDir: dir, pluginDirs: [], cipher: plainCipher, logger });
 
     expect(core.notifications.list().map((n) => n.id)).toEqual(['github:2', 'github:1']);
     expect(core.getAppSettings()).toEqual({ ...LEGACY.app, language: 'system' });

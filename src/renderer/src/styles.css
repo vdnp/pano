@@ -1019,3 +1019,15 @@ button.wlist-row:hover { background: var(--bg); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Ayarlar panelinde başlatılamayan eklenti satırı: mesaj + "Yeniden dene" */
+.restart-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+
+/* İzin onayı: istenen izinler; güncellemede yeni istenenler amber işaretli */
+.consent-list { margin: 16px 0 20px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.consent-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.consent-list li[data-new] { border-color: var(--amber); }
+.consent-new { margin-left: auto; padding: 1px 8px; border-radius: 999px; background: var(--amber); color: var(--amber-ink); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.source[data-state='consent'] > .source-main .status-dot { background: var(--amber); }
+.source[data-state='consent'] .source-status { color: var(--amber); }
+.permissions .link-danger { justify-self: start; font-size: 13px; }

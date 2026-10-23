@@ -11,7 +11,7 @@ import { createCore } from '../../core/index.js';
 import { plainCipher } from '../../core/secrets.js';
 import { createI18n, mergeCatalogs } from '../../shared/i18n.js';
 import { appCatalogs } from '../../locales/index.js';
-import { removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 const N = {
   id: 'github:1',
@@ -531,8 +531,8 @@ describe('otomasyon döngü önleme: çekirdek üzerinden (açık neden kimliği
 
   async function boot() {
     dir = tempDir('pano-loop-');
-    writePlugin(dir, 'dongu', { name: 'dongu', permissions: ['runCommand'] }, LOOPY);
-    core = createCore({ pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
+    writePlugin(dir, 'dongu', { name: 'dongu', permissions: ['runCommand', 'notifications'] }, LOOPY);
+    core = createCore({ resolveHost: publicResolve, pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
     await core.start();
   }
   const settleAll = () => new Promise((r) => setTimeout(r, 150));
@@ -585,7 +585,7 @@ describe('otomasyon: çekirdek üzerinden', () => {
   async function boot() {
     dir = tempDir('pano-automation-');
     writePlugin(dir, 'steam', { name: 'steam' }, STEAM_LIKE);
-    core = createCore({ pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
+    core = createCore({ resolveHost: publicResolve, pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
     await core.start();
   }
   const finished = (runId) => new Promise((resolve) => {

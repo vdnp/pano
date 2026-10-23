@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('pano', {
     runNow: invoke('sources:runNow'),
     updateSettings: invoke('sources:updateSettings'),
     setSecret: invoke('sources:setSecret'),
+    restartPlugin: invoke('sources:restartPlugin'),
+    approvePlugin: invoke('sources:approvePlugin'),
+    revokePlugin: invoke('sources:revokePlugin'),
     suggest: invoke('sources:suggest')
   },
   appSettings: {

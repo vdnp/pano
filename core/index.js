@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
 import { openStorage } from './storage/index.js';
 import { createNotificationStore } from './notifications.js';
 import { createSecrets } from './secrets.js';
 import { createScheduler } from './scheduler.js';
 import { loadPlugins } from './loader.js';
-import { createContext, PERMISSIONS } from './context.js';
+import { createContext } from './context.js';
+import { addedPermissions, describePermissions, normalizePermissions, permissionsKey } from './permissions.js';
 import { cleanSuggestion, createCommandRunner } from './commands.js';
-import { createInProcessHost } from './plugin-host.js';
+import { createInProcessHostFactory } from './plugin-host-factory.js';
 import { createAutomation } from './automation/index.js';
 import { createWebFetcher } from './web.js';
 import { createProviderCache } from './providers.js';
@@ -32,7 +34,18 @@ export function createCore({
   fetchFollowsRedirects = false,
   // Eklentinin ctx.openExternal'ı: adresi açar ve true döner; izin verilmeyen adreste false.
   // Adres denetimi ve açma işi çekirdeği kullanan tarafa aittir (Electron'da shell).
-  openExternal = async () => false
+  openExternal = async () => false,
+  // Eklentiye ulaşan host'u kurar: varsayılan süreç içi (modül bu süreçte yüklenir). Electron'da
+  // main sandbox'lı ayrı süreç host'u verir (core/sandbox/remote-host.js + src/main spawn).
+  hostFactory = createInProcessHostFactory(),
+  // Bu klasörlerdeki eklentiler (uygulamayla gelenler) onaysız başlar; diğerleri kullanıcı onayı
+  // ister. Verilmezse tüm klasörler güvenilir sayılır (testler, eski davranış).
+  trustedPluginDirs = pluginDirs,
+  // Eklentilere ayrılmış veri klasörlerinin kökü ("filesystem" izni); yoksa dataDir/plugin-data
+  pluginDataDir = dataDir ? path.join(dataDir, 'plugin-data') : null,
+  // Eklentinin ctx.fetch'i ve yerel ağ denetimi için DNS (testlerde sahte)
+  pluginFetch,
+  resolveHost
 }) {
   const bus = new EventEmitter();
   bus.setMaxListeners(100);
@@ -74,7 +87,10 @@ export function createCore({
     if (!LOCALES.includes(next) || next === locale) return;
     locale = next;
     rebuildI18n();
-    await Promise.all([...plugins.values()].map((plugin) => refresh(plugin)));
+    await Promise.all([...plugins.values()].map(async (plugin) => {
+      await plugin.host?.sync?.({ locale });
+      await refresh(plugin);
+    }));
     bus.emit('sources:changed');
   }
 
@@ -145,43 +161,184 @@ export function createCore({
     for (const key of existing.keys()) scheduler.remove(key);
   }
 
+  // Eklenti tarafına giden kopyalar (ayrı süreçteki ctx senkron değerleri bunlardan verir)
+  function snapshotFor(plugin) {
+    const name = plugin.manifest.name;
+    return {
+      settings: settingsFor(name),
+      secrets: secretsFor(plugin),
+      state: store.get('state')?.[name] ?? {},
+      locale,
+      catalogs: plugin.locales ?? {},
+      // notify'ın "yeni mi" sonucu için bu eklentinin kayıtlı bildirimleri (önek olmadan)
+      knownIds: notifications.list().filter((n) => n.source === name).map((n) => n.id.slice(name.length + 1)),
+      // Eklenti tarafı izinsiz notify'ı hemen reddedebilsin (asıl denetim main'de)
+      permissions: plugin.permissions
+    };
+  }
+
+  const secretsFor = (plugin) => Object.fromEntries(
+    Object.keys(plugin.manifest.secrets ?? {}).map((k) => [k, secrets.get(plugin.manifest.name, k)]).filter(([, v]) => v != null)
+  );
+
+  // Host'un durumu: yeniden başlatma bilgisi, art arda çökmede eklentiyi kapatma
+  function onHostState(plugin, hostState) {
+    plugin.hostState = hostState;
+    if (hostState === 'disabled') {
+      plugin.ready = false;
+      plugin.startError = { key: 'core.errors.pluginCrashed', params: {} };
+      plugin.desc = EMPTY_DESC;
+      commandsCache = null;
+      syncSources(plugin);
+    }
+    bus.emit('sources:changed');
+  }
+
+  // inspect → setup → hazır → açıklama. Başlangıçta ve "Yeniden dene"de aynı sıra
+  async function initPlugin(plugin) {
+    plugin.info = await plugin.host.inspect();
+    if (plugin.info.hasSetup) await plugin.host.invoke('setup');
+    // setup bitmeden katkıları çağrılmaz
+    plugin.ready = true;
+    await refresh(plugin);
+  }
+
+  async function createHost(plugin) {
+    const name = plugin.manifest.name;
+    plugin.host = await hostFactory({
+      name,
+      root: plugin.root,
+      entry: plugin.entry,
+      entryFile: plugin.entryFile,
+      module: plugin.module,
+      manifest: plugin.manifest,
+      ctx: plugin.ctx,
+      logger,
+      error: (key, params) => i18n.error(key, params),
+      snapshot: () => snapshotFor(plugin),
+      onState: (hostState) => onHostState(plugin, hostState)
+    });
+  }
+
+  function failed(plugin, err) {
+    logger.error(`[${plugin.manifest.name}] başlatılamadı:`, err?.message ?? err);
+    // Arayüz "kaynak eklenmedi" yerine asıl sorunu gösterebilsin
+    plugin.startError = { key: 'core.errors.startFailed', params: { error: err?.i18n ?? err?.message ?? String(err) } };
+  }
+
   async function start() {
-    for (const plugin of await loadPlugins(pluginDirs, logger)) {
+    // Eklenti kodu bu süreçte çalıştırılmaz; host kendi yükler (süreç içi ya da ayrı süreç)
+    for (const plugin of await loadPlugins(pluginDirs, logger, { importModules: false })) {
       const name = plugin.manifest.name;
       plugins.set(name, plugin);
       rebuildI18n();
-      const declared = Array.isArray(plugin.manifest.permissions) ? plugin.manifest.permissions : [];
-      for (const p of declared) if (!PERMISSIONS.includes(p)) logger.warn(`[${name}] bilinmeyen izin yok sayıldı: ${p}`);
-      plugin.permissions = declared.filter((p) => PERMISSIONS.includes(p));
-      const ctx = createContext(name, {
+      const { permissions, warnings } = normalizePermissions(plugin.manifest.permissions);
+      for (const w of warnings) logger.warn(`[${name}] izin yok sayıldı: ${w}`);
+      plugin.permissions = permissions;
+      plugin.trusted = isTrusted(plugin);
+      plugin.ctx = createContext(name, {
         notifications, store, secrets, logger,
         getSettings: () => settingsFor(name),
         getI18n: () => i18n,
-        permissions: plugin.permissions,
-        capabilities
+        permissions,
+        capabilities,
+        filesDir: pluginDataDir ? path.join(pluginDataDir, name) : null,
+        fetchImpl: pluginFetch,
+        resolveHost
       });
-      // Eklentiye yalnızca host üzerinden ulaşılır (aşama A'da ayrı süreçteki eklenti için RPC)
-      plugin.host = createInProcessHost({ name, module: plugin.module, ctx, logger });
       plugin.info = EMPTY_INFO;
       plugin.desc = EMPTY_DESC;
 
-      try {
-        plugin.info = await plugin.host.inspect();
-        if (plugin.info.hasSetup) await plugin.host.invoke('setup');
-      } catch (err) {
-        logger.error(`[${name}] başlatılamadı:`, err.message);
-        // Arayüz "kaynak eklenmedi" yerine asıl sorunu gösterebilsin
-        plugin.startError = { key: 'core.errors.startFailed', params: { error: err?.i18n ?? err?.message ?? String(err) } };
+      // Onay yoksa (yeni eklenti ya da izinleri değişmiş) kodu hiç çalıştırılmaz (sandbox'ta bile)
+      plugin.consent = consentFor(plugin);
+      if (plugin.consent) {
+        logger.log(`[${name}] kullanıcı onayı bekleniyor (${plugin.consent.status})`);
         continue;
       }
-
-      // setup bitmeden katkıları çağrılmaz
-      plugin.ready = true;
-      await refresh(plugin);
+      await launch(plugin);
     }
     bus.emit('sources:changed');
     // Eklentiler ve komutları yüklendikten sonra (kurallar onların komutlarını çağırır)
     automation.start();
+  }
+
+  async function launch(plugin) {
+    try {
+      await createHost(plugin);
+      await initPlugin(plugin);
+    } catch (err) {
+      failed(plugin, err);
+    }
+  }
+
+  // --- İzin onayı ------------------------------------------------------------------------------
+  // Uygulamayla gelen eklentiler güvenilirdir; kullanıcı klasöründekiler onaylanmadan başlamaz.
+  // Onay kv pluginGrants'ta: { [ad]: { key, permissions, at } }; izinler değişince yeniden sorulur.
+  function isTrusted(plugin) {
+    const root = path.resolve(plugin.root);
+    return (trustedPluginDirs ?? []).some((d) => root.startsWith(path.resolve(d) + path.sep));
+  }
+
+  const grants = () => store.get('pluginGrants') ?? {};
+
+  function consentFor(plugin) {
+    if (plugin.trusted) return null;
+    const grant = grants()[plugin.manifest.name];
+    if (grant?.key === permissionsKey(plugin.permissions)) return null;
+    return {
+      status: grant ? 'changed' : 'new',
+      // Değiştiyse yalnızca yeni istenenler vurgulanır
+      added: addedPermissions(plugin.permissions, grant?.permissions ?? null)
+    };
+  }
+
+  async function approvePlugin(name) {
+    const plugin = getPlugin(name);
+    if (!plugin.consent) return;
+    store.set('pluginGrants', {
+      ...grants(),
+      [name]: { key: permissionsKey(plugin.permissions), permissions: plugin.permissions, at: Date.now() }
+    });
+    plugin.consent = null;
+    await launch(plugin);
+    bus.emit('sources:changed');
+  }
+
+  // Onayı geri al: eklenti durur ve bir sonraki başlatmada yine sorulur. Yerleşik eklentiler için yok.
+  async function revokePlugin(name) {
+    const plugin = getPlugin(name);
+    if (plugin.trusted) throw i18n.error('core.permissions.cannotRevokeBuiltin');
+    const { [name]: _, ...rest } = grants();
+    store.set('pluginGrants', rest);
+    plugin.ready = false;
+    plugin.startError = null;
+    plugin.host?.dispose?.();
+    plugin.host = null;
+    plugin.info = EMPTY_INFO;
+    plugin.desc = EMPTY_DESC;
+    commandsCache = null;
+    syncSources(plugin);
+    plugin.consent = consentFor(plugin);
+    bus.emit('sources:changed');
+  }
+
+  // Kullanıcının "Yeniden dene"si: çökmeyle kapanan ya da başlatılamayan eklenti baştan kurulur
+  async function restartPlugin(name) {
+    const plugin = getPlugin(name);
+    if (plugin.consent) return;
+    plugin.ready = false;
+    plugin.startError = null;
+    plugin.desc = EMPTY_DESC;
+    commandsCache = null;
+    syncSources(plugin);
+    try {
+      if (plugin.host?.restart) await plugin.host.restart();
+      else if (!plugin.host) await createHost(plugin);
+      await initPlugin(plugin);
+    } catch (err) {
+      failed(plugin, err);
+    }
+    bus.emit('sources:changed');
   }
 
   // Kapanış: yeni çalışma başlamaz, sürenler kısa süre beklenir, sonra depo kapanır.
@@ -191,15 +348,17 @@ export function createCore({
     scheduler.stopAll();
     if (!(await scheduler.drain(drainMs))) logger.warn('Kapanışta süren kaynak işleri beklenmeden kapatıldı');
     for (const plugin of plugins.values()) {
-      if (!plugin.ready || !plugin.info.hasTeardown) continue;
-      try { await plugin.host.invoke('teardown'); } catch { /* kapanışta yut */ }
+      if (plugin.ready && plugin.info.hasTeardown) {
+        try { await plugin.host.invoke('teardown'); } catch { /* kapanışta yut */ }
+      }
+      plugin.host?.dispose?.();
     }
     storage.close();
   }
 
   function listSources() {
     const statuses = scheduler.statuses();
-    return [...plugins.values()].map(({ manifest, startError, locales, info, permissions }) => ({
+    return [...plugins.values()].map(({ manifest, startError, locales, info, permissions, hostState, trusted, consent }) => ({
       name: manifest.name,
       // Metin core'un dilinde; arayüz dil değişince anahtardan yeniden çevirir
       startError: startError ? i18n.t(startError) : null,
@@ -207,8 +366,13 @@ export function createCore({
       locales: locales ?? {},
       // Eklentinin sunduğu katkı türleri: yalnızca kart sunan eklenti "kaynak eklenmedi" sayılmaz
       kinds: { ...(info ?? EMPTY_INFO).kinds },
+      // Ayrı süreçteki eklentinin durumu (ör. "restarting"); süreç içi host'ta null
+      hostState: hostState ?? null,
       // Ayarlar panelinde okunur şekilde gösterilir
-      permissions: permissions ?? [],
+      // Okunur izin listesi; onay bekliyorsa consent ({ status: new|changed, added })
+      permissions: describePermissions(permissions ?? normalizePermissions(null).permissions),
+      trusted: Boolean(trusted),
+      consent: consent ?? null,
       displayName: manifest.displayName ?? manifest.name,
       description: manifest.description ?? '',
       // Kaynağı olmayan eklenti için arayüzdeki kurulum ekranı metni: { title, body, action }
@@ -232,6 +396,7 @@ export function createCore({
     const all = store.get('settings') ?? {};
     store.set('settings', { ...all, [name]: { ...(all[name] ?? {}), ...clean } });
 
+    // describe yeni ayarı eklenti tarafına da taşır
     await refresh(plugin);
     bus.emit('sources:changed');
   }
@@ -379,6 +544,8 @@ export function createCore({
     if (!plugin.manifest.secrets?.[key]) throw i18n.error('core.errors.unknownSecret', { key });
     if (value) secrets.set(name, key, value);
     else secrets.delete(name, key);
+    // Ayrı süreçteki eklentinin kopyası; mesajlar sırayla gider, aşağıdaki çalıştırmadan önce ulaşır
+    plugin.host?.sync?.({ secrets: secretsFor(plugin) });
     bus.emit('sources:changed');
 
     // Anahtar değişince beklemeden kontrol et
@@ -626,7 +793,10 @@ export function createCore({
       runNow: (key) => scheduler.runNow(key),
       updateSettings,
       setSecret,
-      suggest
+      suggest,
+      restartPlugin,
+      approvePlugin,
+      revokePlugin
     }
   };
 }

@@ -31,7 +31,9 @@ function validateManifest(manifest) {
 
 // Verilen klasörlerdeki her alt klasörü bir eklenti olarak yükler.
 // Aynı isimde iki eklenti varsa ilk bulunan kullanılır.
-export async function loadPlugins(dirs, logger) {
+// importModules: false ise eklenti kodu bu süreçte hiç çalıştırılmaz (yalnızca manifest, kataloglar ve
+// giriş dosyasının yolu); kodu eklentinin host'u kendi sürecinde yükler (aşama A2: sandbox).
+export async function loadPlugins(dirs, logger, { importModules = true } = {}) {
   const plugins = [];
   const seen = new Set();
 
@@ -55,12 +57,16 @@ export async function loadPlugins(dirs, logger) {
           continue;
         }
 
-        const entryFile = path.join(root, manifest.main ?? 'index.js');
-        const mod = (await import(/* @vite-ignore */ pathToFileURL(entryFile).href)).default;
-        if (!mod || typeof mod !== 'object') throw new Error('varsayılan export bir nesne olmalı');
+        const entry = manifest.main ?? 'index.js';
+        const entryFile = path.join(root, entry);
+        let mod = null;
+        if (importModules) {
+          mod = (await import(/* @vite-ignore */ pathToFileURL(entryFile).href)).default;
+          if (!mod || typeof mod !== 'object') throw new Error('varsayılan export bir nesne olmalı');
+        }
 
         seen.add(manifest.name);
-        plugins.push({ manifest, module: mod, root, locales: await readLocales(root, logger) });
+        plugins.push({ manifest, module: mod, root, entry, entryFile, locales: await readLocales(root, logger) });
         logger.log(`Eklenti yüklendi: ${manifest.name}`);
       } catch (err) {
         logger.error(`Eklenti yüklenemedi (${root}):`, err.message);

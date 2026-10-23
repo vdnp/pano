@@ -5,7 +5,7 @@ import { createCore } from '../../core/index.js';
 import { loadPlugins } from '../../core/loader.js';
 import { plainCipher } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
-import { removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 function writeLocales(root, catalogs) {
   fs.mkdirSync(path.join(root, 'locales'), { recursive: true });
@@ -33,7 +33,7 @@ describe('çok dilli core', () => {
       export default { setup() { throw new Error('ayar yok'); } };`);
     writeLocales(broken, { tr: '{ bozuk json' });
 
-    core = createCore({
+    core = createCore({ resolveHost: publicResolve,
       pluginDirs: [dir], cipher: plainCipher, logger, storage: createSqliteStorage(':memory:'), locale: 'en'
     });
     await core.start();

@@ -7,6 +7,11 @@ import { isPrivateHost } from '../../core/web.js';
 import { createI18n, mergeCatalogs, resolveLocale } from '../../shared/i18n.js';
 import { appCatalogs } from '../../locales/index.js';
 import { isPluginOpenable, isWebUrl } from './urls.js';
+import { createSandboxSpawner, registerPluginScheme } from './plugin-sandbox.js';
+import { createRemoteHostFactory } from '../../core/sandbox/remote-host.js';
+
+// Eklentilerin pano-plugin:// protokolü uygulama hazır olmadan kaydedilmeli
+registerPluginScheme();
 
 // package.json build.appId ile aynı olmalı; Windows bildirimleri bu kimliğe bağlıdır
 const APP_ID = 'io.github.vdnp.pano';
@@ -217,6 +222,9 @@ function registerIpc() {
   handle('sources:suggest', (name, provider, query) =>
     core.sources.suggest(String(name), String(provider), String(query ?? ''))
   );
+  handle('sources:restartPlugin', (name) => core.sources.restartPlugin(String(name)));
+  handle('sources:approvePlugin', (name) => core.sources.approvePlugin(String(name)));
+  handle('sources:revokePlugin', (name) => core.sources.revokePlugin(String(name)));
   handle('sources:setSecret', (name, key, value) =>
     core.sources.setSecret(String(name), String(key), value ? String(value) : '')
   );
@@ -418,6 +426,8 @@ if (!app.requestSingleInstanceLock()) {
     core = createCore({
       dataDir: app.getPath('userData'),
       pluginDirs: pluginDirs(),
+      // Uygulamayla gelen eklentiler onaysız başlar; kullanıcının eklediği (userData/plugins) onay ister
+      trustedPluginDirs: [pluginDirs()[0]],
       cipher,
       // Dil ayarı core'un deposunda; onu okumadan önceki hatalar sistem dilinde olsun
       locale: resolveLocale('system', app.getPreferredSystemLanguages()),
@@ -425,6 +435,17 @@ if (!app.requestSingleInstanceLock()) {
       userAgent: app.userAgentFallback,
       fetchImpl: createReaderFetch(),
       fetchFollowsRedirects: true,
+      // Her eklenti ayrı, sandbox'lı bir süreçte (aşama A2). PANO_PLUGIN_HOST=inprocess yalnızca
+      // geliştirme içindir: eklentiyi main sürecinde çalıştırır (güvenlik sınırı yok).
+      hostFactory: process.env.PANO_PLUGIN_HOST === 'inprocess'
+        ? undefined
+        : createRemoteHostFactory({
+            spawn: createSandboxSpawner({
+              runtimeFile: path.join(__dirname, '../plugin-runtime/runtime.js'),
+              preloadFile: path.join(__dirname, '../preload/plugin.js'),
+              devTools: !app.isPackaged && process.env.PANO_PLUGIN_DEVTOOLS === '1'
+            })
+          }),
       // Eklentinin ctx.openExternal'ı: http(s) ve yalnızca steam://rungameid/<id>
       openExternal: async (url) => {
         if (!isPluginOpenable(url)) return false;

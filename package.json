@@ -14,11 +14,12 @@
     "url": "https://github.com/vdnp/pano/issues"
   },
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "start": "electron-vite preview",
-    "dist": "electron-vite build && electron-builder",
-    "test": "vitest run"
+    "dev": "npm run build:runtime && electron-vite dev",
+    "build": "npm run build:runtime && electron-vite build",
+    "start": "npm run build:runtime && electron-vite preview",
+    "dist": "npm run build && electron-builder",
+    "test": "vitest run",
+    "build:runtime": "node scripts/build-plugin-runtime.mjs"
   },
   "dependencies": {
     "@fontsource/chakra-petch": "^5.0.0",

@@ -13,13 +13,13 @@ import github from '../../plugins/github/index.js';
 import rss from '../../plugins/rss/index.js';
 import steam from '../../plugins/steam/index.js';
 import demo from '../../plugins/ornek-kart/index.js';
-import { pluginI18n, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { TEST_PERMISSIONS, pluginI18n, publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 // Gerçek eklenti modülü + gerçek ctx ile süreç içi host
 function hostFor(name, module, settings = {}) {
   const storage = createSqliteStorage(':memory:');
   const i18n = pluginI18n(name);
-  const ctx = createContext(name, {
+  const ctx = createContext(name, { permissions: TEST_PERMISSIONS, resolveHost: publicResolve,
     notifications: createNotificationStore(storage, new EventEmitter()),
     store: storage.kv,
     secrets: createSecrets(storage.kv),
@@ -128,7 +128,7 @@ describe('çekirdek: önbelleğe alınmış açıklamalar', () => {
     fs.writeFileSync(path.join(root, 'locales', 'tr.json'), JSON.stringify({ title: 'Başlık' }));
     fs.writeFileSync(path.join(root, 'locales', 'en.json'), JSON.stringify({ title: 'Title' }));
     writePlugin(dir, 'bozuk', { name: 'bozuk' }, BROKEN);
-    core = createCore({ pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
+    core = createCore({ resolveHost: publicResolve, pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
     await core.start();
   }
 

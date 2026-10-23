@@ -25,7 +25,7 @@ describe('loader', () => {
 
     const plugins = await loadPlugins([d], logger);
     expect(plugins).toHaveLength(1);
-    expect(plugins[0].manifest).toEqual({ name: 'demo', displayName: 'Demo' });
+    expect(plugins[0].manifest).toMatchObject({ name: 'demo', displayName: 'Demo' });
     expect(plugins[0].root).toBe(root);
     expect(Object.keys(plugins[0].module.sources)).toEqual(['a']);
     expect(logger.log).toHaveBeenCalledWith('Eklenti yüklendi: demo');

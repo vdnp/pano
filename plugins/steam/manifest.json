@@ -4,7 +4,16 @@
   "version": "0.1.0",
   "description": "Takip ettiğin oyunların Steam haberlerini bildirir; profilini, kütüphaneni ve başarımlarını panelde gösterir.",
   "main": "index.js",
-  "permissions": ["openExternal"],
+  "permissions": {
+    "network": {
+      "hosts": [
+        "api.steampowered.com",
+        "store.steampowered.com"
+      ]
+    },
+    "openExternal": true,
+    "notifications": true
+  },
   "setup": {
     "title": "Henüz oyun eklenmedi",
     "body": "Haberlerini takip etmek istediğin oyunları ayarlardan adıyla arayıp ekle. Yeni haberler burada bildirim olarak görünür; ilk eklemede her oyundan yalnızca son 3 haber gelir.",

@@ -3,7 +3,7 @@ import { createCore } from '../../core/index.js';
 import { plainCipher } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
 import { sanitizeView, WIDGET_VIEWS } from '../../core/widgets.js';
-import { removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 describe('kart görünümleri: şema temizleme', () => {
   it('yalnızca dört görünüm vardır', () => {
@@ -99,7 +99,7 @@ describe('kartlar: core üzerinden', () => {
     globalThis.__widgetCalls = [];
     dir = tempDir('pano-widgets-');
     writePlugin(dir, 'kart', { name: 'kart', settings: { genis: { type: 'boolean', default: false }, gizli: { type: 'boolean', default: false } } }, PLUGIN);
-    core = createCore({ pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
+    core = createCore({ resolveHost: publicResolve, pluginDirs: [dir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:') });
     await core.start();
   });
 

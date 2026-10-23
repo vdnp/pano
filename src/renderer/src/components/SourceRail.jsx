@@ -89,12 +89,14 @@ export default function SourceRail({
             const multi = jobs.length > 1;
             const job = jobs[0];
             const failed = Boolean(source.startError);
+            const pending = Boolean(source.consent);
             const startError = failed ? t(source.startErrorI18n ?? source.startError) : undefined;
-            const state = failed ? 'error' : multi ? summaryState(jobs) : job?.state ?? 'idle';
+            const state = pending ? 'consent' : failed ? 'error' : multi ? summaryState(jobs) : job?.state ?? 'idle';
             const singleError = job?.state === 'error' ? t(job.errorI18n ?? job.error) : undefined;
-            const statusText = failed ? t('rail.status.startFailed') : multi ? summaryText(jobs, t) : jobStatusText(job, now, i18n, source);
+            const statusText = pending ? t('rail.status.consent')
+              : failed ? t('rail.status.startFailed') : multi ? summaryText(jobs, t) : jobStatusText(job, now, i18n, source);
             // Hata satırında ayarları açan kısa yol (anahtar eksik, adres hatalı vb. çoğu hata oradan düzelir)
-            const fixable = state === 'error';
+            const fixable = state === 'error' || pending;
             return (
               <li key={source.name} className="source" data-state={state}>
                 <button
@@ -118,7 +120,7 @@ export default function SourceRail({
                 </button>
                 {fixable && (
                   <button className="link source-fix" onClick={() => onOpenSettings(source.name)}>
-                    {t('rail.fix')}
+                    {t(pending ? 'rail.review' : 'rail.fix')}
                   </button>
                 )}
                 <div className="source-actions">

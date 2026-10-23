@@ -8,7 +8,7 @@ import { createContext } from '../../core/context.js';
 import { createNotificationStore } from '../../core/notifications.js';
 import { createSecrets } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
-import { pluginI18n, silentLogger } from '../helpers.js';
+import { TEST_PERMISSIONS, pluginI18n, publicResolve, silentLogger } from '../helpers.js';
 
 const NEWS = JSON.parse(fs.readFileSync(new URL('../fixtures/steam-news.json', import.meta.url), 'utf8'));
 const GAME = { appId: 730, name: 'Counter-Strike 2' };
@@ -32,7 +32,7 @@ function setup(settings = {}, locale = 'tr') {
   const storage = createSqliteStorage(':memory:');
   const notifications = createNotificationStore(storage, new EventEmitter());
   const current = { officialOnly: false, patchNotesOnly: false, ...settings };
-  const ctx = createContext('steam', {
+  const ctx = createContext('steam', { permissions: TEST_PERMISSIONS, resolveHost: publicResolve,
     notifications,
     store: storage.kv,
     secrets: createSecrets(storage.kv),
@@ -329,7 +329,9 @@ describe('steam komutu: oyunu başlat', () => {
     expect(await command.run(ctx, { appId: 730, name: 'Counter-Strike 2' })).toEqual({ message: "Steam'de başlatılıyor: Counter-Strike 2" });
     expect(ctx.openExternal).toHaveBeenCalledWith('steam://rungameid/730');
     expect((await command.run(ctx, { appId: 570 })).message).toBe("Steam'de başlatılıyor: Steam uygulaması 570");
-    expect(manifest.permissions).toEqual(['openExternal']);
+    expect(manifest.permissions).toEqual({
+      network: { hosts: ['api.steampowered.com', 'store.steampowered.com'] }, openExternal: true, notifications: true
+    });
   });
 
   it('geçersiz App ID açılmaz; oyun araması önerisi bildirilmiş', async () => {

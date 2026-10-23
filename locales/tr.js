@@ -6,7 +6,12 @@ export default {
       pluginNotFound: 'Eklenti bulunamadı: {name}',
       unknownSecret: 'Bilinmeyen gizli alan: {key}',
       unknownProvider: 'Bilinmeyen öneri sağlayıcısı: {provider}',
-      startFailed: "Eklenti başlatılamadı: {error}. Sorunu giderip Pano'yu yeniden başlat."
+      startFailed: "Eklenti başlatılamadı: {error}. Sorunu giderip Pano'yu yeniden başlat.",
+      pluginCrashed: 'Eklenti kısa sürede art arda çöktüğü için kapatıldı. Ayarlarından "Yeniden dene" ile tekrar başlatabilirsin.',
+      pluginRestarting: 'Eklenti yeniden başlatılıyor; birkaç saniye sonra tekrar dene.',
+      pluginDisposed: 'Eklenti kapatıldı.',
+      pluginLimit: 'Eklenti izin verilen sınırı aştı: {what}.',
+      pluginBadRequest: 'Eklentiden geçersiz bir istek geldi: {what}.'
     },
     xml: {
       entity: 'Belge izin verilmeyen varlık (ENTITY) tanımları içeriyor.',
@@ -75,7 +80,24 @@ export default {
       notInCommand: '"{permission}" yalnızca bir komut çalışırken kullanılabilir.',
       names: {
         openExternal: 'Bağlantı açma',
-        runCommand: 'Başka komutları çalıştırma'
+        runCommand: 'Başka komutları çalıştırma',
+        network: 'İnternet erişimi',
+        notifications: 'Bildirim gösterme',
+        filesystem: 'Kendi veri klasörüne dosya yazma'
+      },
+      cannotRevokeBuiltin: 'Uygulamayla gelen eklentinin izinleri geri alınamaz.',
+      network: {
+        badUrl: 'Geçersiz adres: {url}',
+        notDeclared: '{plugin} eklentisi internet erişimi izni istememiş; {host} adresine bağlanamaz.',
+        hostNotAllowed: '{plugin} eklentisi {host} adresine bağlanma izni istememiş.',
+        httpNotAllowed: '{host} adresine yalnızca güvenli bağlantı (https) ile bağlanılabilir.',
+        privateAddress: '{host} yerel ağdaki bir adres; eklentiler yerel ağa bağlanamaz.',
+        tooManyRedirects: '{host} çok fazla yönlendirme yaptı.'
+      },
+      files: {
+        badPath: 'Geçersiz dosya yolu: {path}. Yalnızca eklentinin kendi klasöründeki yollar kullanılabilir.',
+        quota: 'Eklentinin veri klasörü dolu (en fazla {mb} MB ve {files} dosya).',
+        unavailable: 'Eklenti veri klasörü bu ortamda kullanılamıyor.'
       }
     },
     automation: {
@@ -164,6 +186,7 @@ export default {
     all: 'Tüm kaynaklar',
     empty: 'Henüz eklenti yüklenmedi. plugins klasörüne bir eklenti ekle.',
     status: {
+      consent: 'Onay bekliyor',
       waiting: 'Bekliyor',
       running: 'Kontrol ediliyor',
       lastCheck: 'Son kontrol {when}',
@@ -176,6 +199,7 @@ export default {
     runNowLabel: '{name} kaynağını şimdi kontrol et',
     settings: 'Ayarlar',
     settingsLabel: '{name} ayarları',
+    review: 'İzinleri incele ve onayla',
     jobsLabel: '{name} kaynakları',
     appSettings: 'Uygulama ayarları',
     fix: 'Ayarları aç ve düzelt'
@@ -228,6 +252,8 @@ export default {
   },
 
   settings: {
+    restartPlugin: 'Yeniden dene',
+    restarting: 'Eklenti yeniden başlatılıyor…',
     permissions: 'İzinler',
     permissionsHelp: 'Bu eklentinin beyan ettiği yetenekler. Yalnızca komut çalışırken kullanılabilirler.',
     title: '{name} ayarları',
@@ -380,6 +406,28 @@ export default {
       actual: 'gerçek değer: {value}',
       emptyValue: '(boş)',
       needsConfirm: 'onay ister'
+    }
+  },
+
+
+  consent: {
+    title: '{name} şu izinleri istiyor',
+    intro: 'Bu eklenti uygulamayla gelmedi. İzin vermeden kodu hiç çalıştırılmaz. İstediklerini inceleyip karar ver.',
+    changed: 'Eklenti güncellendi ve izinleri değişti. Yeni istenenler işaretli.',
+    isNew: 'yeni',
+    approve: 'İzin ver ve başlat',
+    later: 'Şimdi değil',
+    revoke: 'İzinleri geri al ve durdur',
+    revokeConfirm: '{name} eklentisinin izinleri geri alınsın mı? Eklenti durur ve yeniden onay ister.',
+    none: 'Bu eklenti hiçbir izin istemiyor.',
+    perm: {
+      network: 'İnternet: {host}',
+      networkAny: 'İnternette yerel ağ dışındaki her adres',
+      networkFromSettings: 'Ayarlarda kendi girdiğin adresler ({path})',
+      notifications: 'Bildirim gösterme',
+      openExternal: 'Tarayıcıda ya da ilgili uygulamada bağlantı açma',
+      runCommand: 'Başka eklentilerin komutlarını çalıştırma',
+      filesystem: 'Kendi veri klasörüne dosya yazma'
     }
   },
 

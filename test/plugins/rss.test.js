@@ -7,7 +7,7 @@ import { createNotificationStore } from '../../core/notifications.js';
 import { createSecrets } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
 import { parseXml } from '../../core/xml.js';
-import { pluginI18n, silentLogger } from '../helpers.js';
+import { TEST_PERMISSIONS, pluginI18n, publicResolve, silentLogger } from '../helpers.js';
 
 const fixture = (name) => fs.readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8');
 const RSS = fixture('rss2.xml');
@@ -25,7 +25,7 @@ function setup({ url = FEED_URL, name = '', locale = 'tr' } = {}) {
   const i18n = pluginI18n('rss', locale);
   const storage = createSqliteStorage(':memory:');
   const notifications = createNotificationStore(storage, new EventEmitter());
-  const ctx = createContext('rss', {
+  const ctx = createContext('rss', { permissions: TEST_PERMISSIONS, resolveHost: publicResolve,
     notifications,
     store: storage.kv,
     secrets: createSecrets(storage.kv),

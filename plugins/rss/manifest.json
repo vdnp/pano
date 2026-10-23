@@ -4,6 +4,14 @@
   "version": "0.1.0",
   "description": "RSS ve Atom akışlarındaki yeni girişleri bildirir.",
   "main": "index.js",
+  "permissions": {
+    "network": {
+      "fromSettings": [
+        "feeds.url"
+      ]
+    },
+    "notifications": true
+  },
   "setup": {
     "title": "Henüz akış eklenmedi",
     "body": "Takip etmek istediğin blogların, haber sitelerinin ya da projelerin RSS veya Atom adresini ekle. Yeni yazılar burada bildirim olarak görünür; ilk eklemede yalnızca son 5 giriş gelir.",
@@ -16,8 +24,18 @@
       "addLabel": "Akış ekle",
       "help": "Her satır ayrı bir akış. Görünen ad boş kalırsa akışın kendi başlığı kullanılır. Yeni eklenen akıştan yalnızca son 5 giriş bildirilir.",
       "item": {
-        "url": { "type": "string", "label": "Adres", "required": true, "width": "wide", "placeholder": "https://ornek.com/feed.xml" },
-        "name": { "type": "string", "label": "Görünen ad", "placeholder": "İsteğe bağlı" }
+        "url": {
+          "type": "string",
+          "label": "Adres",
+          "required": true,
+          "width": "wide",
+          "placeholder": "https://ornek.com/feed.xml"
+        },
+        "name": {
+          "type": "string",
+          "label": "Görünen ad",
+          "placeholder": "İsteğe bağlı"
+        }
       }
     },
     "interval": {

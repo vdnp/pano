@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCore } from '../../core/index.js';
 import { plainCipher } from '../../core/secrets.js';
-import { removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 const MANIFEST = {
   name: 'demo',
@@ -33,7 +33,7 @@ describe('createCore', () => {
     dataDir = tempDir('pano-data-');
     pluginDir = tempDir('pano-plugins-');
     writePlugin(pluginDir, 'demo', MANIFEST, PLUGIN_CODE);
-    core = createCore({ dataDir, pluginDirs: [pluginDir], cipher: plainCipher, logger: silentLogger() });
+    core = createCore({ resolveHost: publicResolve, dataDir, pluginDirs: [pluginDir], cipher: plainCipher, logger: silentLogger() });
     await core.start();
   });
 
@@ -123,7 +123,7 @@ describe('createCore', () => {
     core.sources.setSecret('demo', 'token', 'abc');
     await core.stop();
 
-    core = createCore({ dataDir, pluginDirs: [pluginDir], cipher: plainCipher, logger: silentLogger() });
+    core = createCore({ resolveHost: publicResolve, dataDir, pluginDirs: [pluginDir], cipher: plainCipher, logger: silentLogger() });
     await core.start();
     expect(demo().settings.interval).toBe(20);
     expect(demo().secretsSet.token).toBe(true);

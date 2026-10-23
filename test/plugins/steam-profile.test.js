@@ -10,7 +10,7 @@ import { createNotificationStore } from '../../core/notifications.js';
 import { createSecrets } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
 import { sanitizeView } from '../../core/widgets.js';
-import { pluginI18n, silentLogger } from '../helpers.js';
+import { TEST_PERMISSIONS, pluginI18n, publicResolve, silentLogger } from '../helpers.js';
 
 const F = JSON.parse(fs.readFileSync(new URL('../fixtures/steam-profile.json', import.meta.url), 'utf8'));
 const ME = '76561197960435530';
@@ -37,7 +37,7 @@ function setup(settings = {}, { locale = 'tr', key = KEY } = {}) {
   const secrets = createSecrets(storage.kv);
   if (key) secrets.set('steam', 'apiKey', key);
   const current = { steamId: ME, ...settings };
-  const ctx = createContext('steam', {
+  const ctx = createContext('steam', { permissions: TEST_PERMISSIONS, resolveHost: publicResolve,
     notifications, store: storage.kv, secrets, logger: silentLogger(), getSettings: () => current, getI18n: () => i18n
   });
   return { ctx, notifications, settings: current };

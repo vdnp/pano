@@ -15,6 +15,13 @@ export function pluginI18n(name, locale = 'tr') {
   return createI18n({ locale, catalogs: mergeCatalogs(appCatalogs, { [name]: { tr: read('tr'), en: read('en') } }) });
 }
 
+// Testlerdeki geçici eklentilerin varsayılan izinleri: bildirim ve (sahte ağda) tüm genel internet.
+// İzin denetimi testleri kendi manifestini açıkça verir.
+export const TEST_PERMISSIONS = { notifications: true, network: { hosts: ['*'] } };
+
+// Sahte DNS: her alan adı genel bir IP'ye çözülür (yerel ağ denetimi için; ağa çıkılmaz)
+export const publicResolve = async () => ['93.184.216.34'];
+
 export function silentLogger() {
   return { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
 }
@@ -33,7 +40,10 @@ export function writePlugin(dir, folder, manifest, code = 'export default {};', 
   fs.writeFileSync(path.join(dir, 'package.json'), '{ "type": "module" }');
   const root = path.join(dir, folder);
   fs.mkdirSync(root, { recursive: true });
-  const manifestText = typeof manifest === 'string' ? manifest : JSON.stringify(manifest);
+  const withDefaults = manifest && typeof manifest === 'object' && !('permissions' in manifest)
+    ? { ...manifest, permissions: TEST_PERMISSIONS }
+    : manifest;
+  const manifestText = typeof manifest === 'string' ? manifest : JSON.stringify(withDefaults);
   if (manifest !== null) fs.writeFileSync(path.join(root, 'manifest.json'), manifestText);
   fs.writeFileSync(path.join(root, main), code);
   return root;

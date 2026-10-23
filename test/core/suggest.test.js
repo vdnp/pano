@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCore } from '../../core/index.js';
 import { plainCipher } from '../../core/secrets.js';
 import { createSqliteStorage } from '../../core/storage/index.js';
-import { removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
+import { publicResolve, removeDir, silentLogger, tempDir, writePlugin } from '../helpers.js';
 
 const MANIFEST = {
   name: 'oyun',
@@ -45,7 +45,7 @@ describe('öneri sağlayıcısı', () => {
     globalThis.__suggestCalls = [];
     pluginDir = tempDir('pano-suggest-');
     writePlugin(pluginDir, 'oyun', MANIFEST, PLUGIN_CODE);
-    core = createCore({
+    core = createCore({ resolveHost: publicResolve,
       pluginDirs: [pluginDir], cipher: plainCipher, logger: silentLogger(), storage: createSqliteStorage(':memory:')
     });
     await core.start();

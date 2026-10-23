@@ -10,10 +10,9 @@ rehberi, denemek için örnek RSS/Steam kaynakları, ertelenen işler: DeepL, St
 Pano, Electron + React ile yazılmış, eklenti tabanlı kişisel bir bildirim panelidir.
 Tamamlanan aşamalar: (1) **bildirimler** (GitHub, RSS, Steam kaynakları); (2) **kartlar**
 (`providers`/`widgets`, panel); (3) **komutlar** (`commands`, komut paleti, geçmiş);
-(4) **otomasyon** (kurallar). Sıradaki aşamalar, her biri ayrı oturumda: (A) **eklenti
-izolasyonu** (her eklenti ayrı süreçte, ctx RPC ile; eklenti API'si değişmeden),
-(B) **izinler** (network alan adı listesi, filesystem, kurulumda onay ekranı),
-(C) **dağıtım** (electron-builder NSIS/dmg, electron-updater, GitHub Actions, imzalama).
+(4) **otomasyon** (kurallar); (A) **eklenti izolasyonu** (her eklenti sandbox'lı ayrı süreçte,
+ctx RPC ile; eklenti API'si değişmedi); (B) **izinler** (alan adı listesi, eklenti klasörü,
+kurulumda onay). Sıradaki aşama, ayrı oturumda: (C) **dağıtım** (electron-builder NSIS/dmg, electron-updater, GitHub Actions, imzalama).
 Yeni iş bu sıraya uyar; ileriki aşamaya ait altyapıyı erkenden kurma.
 
 ## Yapı
@@ -24,8 +23,14 @@ core/          Electron'dan bağımsız çekirdek (createCore → bus, start/sto
   plugin-host.js  eklenti sınırı: core eklenti koduna yalnızca buradan ulaşır. inspect() sabit bilgi,
                describe(settings) ayara bağlı katkıların düz JSON açıklaması (core önbelleğe alır;
                listeler eklenti kodunu çağırmaz), invoke(tür, kimlik, argümanlar, { signal, onProgress })
-               her çağrı. Şimdi süreç içi; aşama A2'de aynı arayüz RPC ile ayrı sürece taşınır
+               her çağrı. plugin-host-factory.js süreç içi fabrika (testler, PANO_PLUGIN_HOST=inprocess)
+  sandbox/     ayrı süreç: runtime.js + remote-ctx.js eklenti tarafında (tarayıcıda da çalışır; ctx'in
+               senkron değerleri main'in gönderdiği kopyalardan), ctx-service.js ve remote-host.js main
+               tarafında (gerçek ctx'e bağlama, boyut sınırları, ping/çökme/yeniden başlatma denetleyicisi)
   context.js   eklentiye verilen ctx (izinli yetenekler: forCommand)
+  permissions.js  izin modeli (normalize, eski dizi biçimi, alan adı eşleşmesi, ayardan adres, değişiklik anahtarı)
+  net-guard.js    ctx.fetch: izinli alan adı, http(s), yerel ağ yok (DNS çözülüp denetlenir), yönlendirme adım adım
+  plugin-files.js "filesystem": userData/plugin-data/<ad>/ içinde metin dosyaları, kota
   schema.js    ayar ve komut parametresi şeması (coerce, validateParams)
   commands.js  komut kayıt defteri, çalıştırma (iptal, ilerleme), geçmiş (en yeni 200)
   automation/  otomasyon motoru: rules.js (doğrulama, croner ile cron), conditions.js, template.js
@@ -47,8 +52,10 @@ plugins/steam/   api.js (ortak istek/hata), news.js (GetNewsForApp, news-<appId>
                  isteğe bağlı arkadaş bildirimi `friends`)
 plugins/ornek-kart/  panel kartları demosu; yalnızca geliştirmede yüklenir (extraResources filtresi)
 src/main/      Electron ana süreç: cipher (safeStorage), IPC, masaüstü bildirimleri, pencere, tepsi,
-               genel kısayol (Ctrl/Cmd+Shift+Space → palet); urls.js dışarıda açılabilir adresler
-src/preload/   window.pano köprüsü (contextBridge)
+               genel kısayol (Ctrl/Cmd+Shift+Space → palet); urls.js dışarıda açılabilir adresler;
+               plugin-sandbox.js eklenti penceresi (gizli, sandbox, kendi oturumu, pano-plugin://)
+src/plugin-runtime/  eklenti penceresinin girişi; scripts/build-plugin-runtime.mjs → out/plugin-runtime
+src/preload/   index.js window.pano köprüsü (contextBridge); plugin.js eklenti penceresine yalnızca portu iletir
 src/renderer/  React arayüz (App.jsx, components/, lib/usePano.js, lib/i18n.jsx, styles.css)
 shared/i18n.js çeviri modülü (core, main ve arayüz ortak; saf JS)
 shared/rpc.js  taşıyıcıdan bağımsız RPC (istek/yanıt, zaman aşımı, iptal, ilerleme, ping, hata
@@ -107,20 +114,32 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
      tablosuna yazılır (migration 8). `notificationAction: { label, params(bildirim), markRead? }`
      akışta o eklentinin bildirim satırında düğme olur (parametreler core'da bildirimden çıkarılır).
      `palette: false` paletten gizler. Palet liste türü parametreyi sormaz.
-   - **İzinler** (`manifest.permissions`: `openExternal`, `runCommand`): beyan edilmeyen ya da komut
-     dışında (ör. kaynak işinde) çağrılan `ctx.openExternal` / `ctx.runCommand` anlaşılır hata verir.
-     `runCommand` onay (`confirm`) isteyen komutu çalıştıramaz, zincir en fazla 3 derinlik.
-     Adres denetimi main'de (`src/main/urls.js`): http(s) ve yalnızca `steam://rungameid/<rakam>`.
-     Dosya sistemi, kabuk komutu gibi yetenekler izin sistemiyle sonraki aşamalarda gelir.
+   - **İzinler** (`manifest.permissions`, core/permissions.js): `{ network: { hosts: ['api.x.com',
+     '*.x.com', '*'], fromSettings: ['feeds.url'] }, notifications, openExternal, runCommand, filesystem }`
+     (eski dizi biçimi de geçer). Beyan edilmeyen yetenek anlaşılır hata verir: `ctx.notify` için
+     `notifications`, `ctx.fetch` için `network` (sabit alan adları yalnızca https; ayardan gelen adreste
+     kullanıcı http yazdıysa http; `*` tüm genel internet), `ctx.files` için `filesystem`.
+     `openExternal`/`runCommand` ayrıca yalnızca komut içinde; `runCommand` onay isteyen komutu
+     çalıştıramaz, zincir en fazla 3. Bağlantı açma adres denetimi main'de (`src/main/urls.js`).
+     **Onay**: `trustedPluginDirs` (Electron'da yalnızca yerleşik `plugins/`) dışındaki eklenti, izinleri
+     onaylanmadan hiç yüklenmez (sandbox'ta bile); onay kv `pluginGrants`'ta izin anahtarıyla saklanır,
+     izinler değişince yeniden sorulur (yalnızca yeniler işaretli). IPC `sources:approvePlugin` /
+     `revokePlugin`. Testlerde `trustedPluginDirs` verilmezse tüm klasörler güvenilir; `writePlugin`
+     manifest'te izin yoksa `TEST_PERMISSIONS` ekler, `publicResolve` sahte DNS'tir.
    Ayarlar ve gizli alanlar `manifest.json` (`settings`, `secrets`) şemasından gelir;
    ayarlar paneli bu şemadan otomatik oluşur. Ayar türleri: `number` (min/max),
    `boolean`, `string`, `list` (`item` alt şeması, `required` alanlar, en fazla 50 öğe,
    iç içe liste yok; boş satır ham değere göre, `required` sayılarda da geçerli; alt alanın
    `width: 'wide'` ipucu ayarlar panelinde o sütunu genişletir). İsteğe bağlı `setup: { title, body, action }`: eklentinin hiç
    kaynağı yokken (ör. akışsız RSS) akışta gösterilen kurulum ekranı metni. `manifest.name`: `^[a-z0-9][a-z0-9-]*$`.
-3. **Eklentiler Node'a doğrudan erişmez** (kural olarak; bugün eklentiler ana süreçte
-   çalıştığı için bu bir düzen, gerçek bir güvenlik sınırı değil — izolasyon aşama A),
-   yalnızca `core/context.js`'deki `ctx`
+3. **Eklentiler Node'a erişemez**: her eklenti gizli, Chromium sandbox'lı bir pencerede çalışır
+   (Node yok; oturumu `pano-plugin://<ad>/` dışındaki her isteği iptal eder, CSP; ağ yalnızca main'deki
+   `ctx.fetch` ile: izinli alan adları, http(s), yerel ağ yok, yönlendirmeler denetlenir, 20 sn, 10 MB).
+   Main eklentiyi güvenilmez sayar (durum 1 MB, bildirim 256 KB). Denetleyici: 10 sn'de bir ping, 30 sn yanıt yoksa ya da süreç çökerse 1/5/15 sn
+   beklemeyle yeniden başlatır; 10 dk'da 3 çökmede eklentiyi kapatır (`sources:restartPlugin` ile
+   "Yeniden dene"). Bilinen sınırlar: DNS rebinding (çözme ile bağlanma arasında kayıt değişirse yerel
+   ağ denetimi atlatılabilir), CPU/bellek kötüye kullanımı yalnızca takılma olarak yakalanır, Chromium
+   sandbox açıkları, izinli bir alan adına veri gönderilmesi engellenmez. Eklenti yalnızca `core/context.js`'deki `ctx`
    üzerinden: `log`, `warn`, `notify`, `fetch` (20 sn zaman aşımı), `settings.get/all`,
    `secrets.get`, `state.get/set`, `parseXml` (fast-xml-parser; ENTITY reddedilir). Eklenti
    klasörleri uygulamanın node_modules'una erişemez (paketlenince asar içinde); npm
@@ -194,7 +213,7 @@ kullanıcının `userData/plugins` klasörü. Aynı isim iki kez gelirse ilki ka
 ```bash
 npm install
 npm run dev      # electron-vite dev (hot reload)
-npm run build    # electron-vite build → out/
+npm run build    # eklenti çalışma zamanı (build:runtime) + electron-vite build → out/
 npm run start    # derlenmiş hali önizle
 npm run dist     # build + electron-builder kurulum dosyası (dist/)
 npm test         # vitest run: test/ altındaki core ve eklenti birim testleri (Electron'suz)
@@ -206,6 +225,8 @@ npx vitest run test/core/commands.test.js -t "iptal"  # adına göre tek test
   değişkenle başlatmak pencereyi açmaz, önce kaldırılmalı.
 - Windows'ta `npm run dist` winCodeSign arşivini açarken sembolik bağ ister: Geliştirici
   Modu açık değilse kurulum dosyası üretilemez (build yine de çalışır).
+- `PANO_PLUGIN_HOST=inprocess` eklentileri main sürecinde çalıştırır (yalnızca geliştirme; sınır yok);
+  `PANO_PLUGIN_DEVTOOLS=1` eklenti pencerelerinin geliştirici araçlarını açar.
 - Uygulamayı denemek için ayrı veri klasörü: `electron . --user-data-dir=<geçici klasör>`;
   kullanıcının gerçek verisi (`%APPDATA%/pano`) değiştirilmez.
 

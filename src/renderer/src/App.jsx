@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, useNow, usePano } from './lib/usePano.js';
 import SourceRail from './components/SourceRail.jsx';
 import Feed from './components/Feed.jsx';
@@ -173,6 +173,17 @@ function Shell({ notifications, sources, appSettings, ready }) {
     : [];
 
   const settingsSource = sources.find((s) => s.name === settingsFor);
+
+  // Yeni ya da izinleri değişmiş eklenti: onay ekranı bu oturumda bir kez kendiliğinden açılır
+  const consentShown = useRef(new Set());
+  useEffect(() => {
+    if (settingsFor) return;
+    const pending = sources.find((s) => s.consent && !consentShown.current.has(s.name));
+    if (pending) {
+      consentShown.current.add(pending.name);
+      setSettingsFor(pending.name);
+    }
+  }, [sources, settingsFor]);
   const reading = readingId ? notifications.find((n) => n.id === readingId) : null;
   // Seçili kaynak varsa yalnızca onun kurulum ekranı gösterilir
   const needsSetup = sources
